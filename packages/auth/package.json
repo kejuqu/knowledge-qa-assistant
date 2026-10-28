@@ -1,0 +1,24 @@
+{
+  "name": "@kqa/auth",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./session": "./src/session.ts",
+    "./password": "./src/password.ts",
+    "./next": "./src/next.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "jose": "^6.0.10"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0"
+  },
+  "devDependencies": {
+    "@kqa/tsconfig": "workspace:*",
+    "next": "^15.3.2",
+    "typescript": "^5.8.0"
+  }
+}

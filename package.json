@@ -1,0 +1,18 @@
+{
+  "name": "knowledge-qa-assistant",
+  "private": true,
+  "packageManager": "pnpm@11.0.9",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @kqa/db run db:generate",
+    "db:migrate": "pnpm --filter @kqa/db run db:migrate",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  }
+}

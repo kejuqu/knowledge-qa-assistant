@@ -1,0 +1,4 @@
+{
+  "extends": "@kqa/tsconfig/nextjs.json",
+  "include": ["src"]
+}

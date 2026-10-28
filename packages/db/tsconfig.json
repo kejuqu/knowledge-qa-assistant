@@ -1,0 +1,4 @@
+{
+  "extends": "@kqa/tsconfig/internal-package.json",
+  "include": ["src", "drizzle.config.ts"]
+}
