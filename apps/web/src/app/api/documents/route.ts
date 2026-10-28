@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, isNull, and } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
 import { getSessionUser } from "@kqa/auth/next";
-import { ingestDocument, extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from "@kqa/ai";
-import { getModelConfigForTenant } from "@/lib/model-config";
+import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from "@kqa/ai";
+import { enqueueDocument } from "@/lib/queue";
 
 // 输入安全：单文件上限 20MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -12,16 +12,27 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  // 知识库是租户共享的：列出租户内所有文档，而非仅自己上传的
+  // 知识库是租户共享的：列出租户内所有未删除文档
   const rows = await db
-    .select()
+    .select({
+      id: documents.id,
+      filename: documents.filename,
+      sizeBytes: documents.sizeBytes,
+      chunkCount: documents.chunkCount,
+      status: documents.status,
+      error: documents.error,
+      createdAt: documents.createdAt,
+    })
     .from(documents)
-    .where(eq(documents.tenantId, user.tenantId))
+    .where(and(eq(documents.tenantId, user.tenantId), isNull(documents.deletedAt)))
     .orderBy(desc(documents.createdAt));
   return NextResponse.json(rows);
 }
 
-/** 上传文档（txt/md/html/pdf/docx）：解析为纯文本 -> 存元数据到 PG -> 切分向量化写入 Milvus */
+/**
+ * 上传文档：解析文本 -> 立即落库（pending）-> 放入处理队列异步向量化。
+ * 前端通过 SSE（/api/events）接收状态变更，避免同步 embedding 造成的请求超时。
+ */
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -66,24 +77,18 @@ export async function POST(request: Request) {
       filename: file.name,
       mimeType: file.type || "application/octet-stream",
       sizeBytes: file.size,
+      status: "pending",
+      sourceText: text,
     })
     .returning();
 
-  try {
-    const config = await getModelConfigForTenant(user.tenantId);
-    const chunkCount = await ingestDocument(
-      { text, documentId: doc.id, filename: doc.filename, tenantId: user.tenantId },
-      config
-    );
-    await db
-      .update(documents)
-      .set({ chunkCount, status: "ready" })
-      .where(eq(documents.id, doc.id));
-  } catch (err) {
-    await db.update(documents).set({ status: "failed" }).where(eq(documents.id, doc.id));
-    const message = err instanceof Error ? err.message : "ingest failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  // 解析入库成功即响应；向量化交给后台队列，状态通过 SSE 推送
+  enqueueDocument({
+    documentId: doc.id,
+    tenantId: user.tenantId,
+    filename: doc.filename,
+    text,
+  });
 
-  return NextResponse.json({ ok: true, id: doc.id });
+  return NextResponse.json({ ok: true, id: doc.id }, { status: 202 });
 }

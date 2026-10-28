@@ -9,8 +9,8 @@ function getMilvusAddress() {
 
 /**
  * 每个向量除了文本内容，还带 metadata：
- * { documentId, filename, chunkIndex, ownerId }
- * 检索时按 ownerId 过滤，天然做到多租户数据隔离
+ * { documentId, filename, chunkIndex, tenantId }
+ * 检索时按 tenantId 过滤，天然做到多租户数据隔离
  */
 export async function getVectorStore(embeddings: OpenAIEmbeddings) {
   return new Milvus(embeddings, {
@@ -19,5 +19,25 @@ export async function getVectorStore(embeddings: OpenAIEmbeddings) {
     autoId: true,
     vectorField: "vector",
     textField: "text",
+    // 显式设置 text 字段最大长度，避免 LangChain 用第一条数据的长度推断 varchar 上限
+    textFieldMaxLength: 65535,
   });
+}
+
+/**
+ * 按 documentId 删除该文档在 Milvus 里的所有向量分块。
+ * 用 Milvus 原生 client 做 delete（LangChain 封装不支持删除）。
+ */
+export async function deleteDocumentVectors(documentId: string): Promise<void> {
+  const { MilvusClient } = await import("@zilliz/milvus2-sdk-node");
+  const client = new MilvusClient({ address: getMilvusAddress() });
+
+  try {
+    await client.delete({
+      collection_name: MILVUS_COLLECTION,
+      filter: `documentId == "${documentId}"`,
+    });
+  } finally {
+    await client.closeConnection();
+  }
 }

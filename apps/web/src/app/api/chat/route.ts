@@ -7,7 +7,7 @@ import { getModelConfigForTenant } from "@/lib/model-config";
 /**
  * POST /api/chat
  * body: { conversationId?: string, message: string }
- * 响应：text/plain 流（首个 chunk 前先发一行 JSON 元信息：conversationId + citations）
+ * 响应：text/plain 流（首个 chunk 前先发一行 JSON 元信息：会话、用户消息和引用 ID）
  */
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -28,12 +28,19 @@ export async function POST(request: Request) {
     convId = conv.id;
   }
 
-  await db.insert(messages).values({ conversationId: convId, role: "user", content: message });
+  const [userMessage] = await db
+    .insert(messages)
+    .values({ conversationId: convId, role: "user", content: message })
+    .returning({ id: messages.id });
 
   const config = await getModelConfigForTenant(user.tenantId);
   const { stream, citations } = await streamRagAnswer(message, user.tenantId, config);
 
-  const metaLine = JSON.stringify({ conversationId: convId, citations }) + "\n";
+  const metaLine = JSON.stringify({
+    conversationId: convId,
+    userMessageId: userMessage.id,
+    citations,
+  }) + "\n";
   const encoder = new TextEncoder();
   const finalConvId = convId;
 

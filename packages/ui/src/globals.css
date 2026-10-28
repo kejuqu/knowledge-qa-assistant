@@ -11,22 +11,23 @@
 @source "../../../apps/auth/src";
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: oklch(0.985 0.014 158 / 0.86);
+  --foreground: oklch(0.22 0.035 158);
+  --card: oklch(1 0.012 158 / 0.88);
+  --card-foreground: oklch(0.22 0.035 158);
+  /* 半透明翠绿：按钮、选中态与进度条共享同一主题色。 */
+  --primary: oklch(0.49 0.13 158 / 0.86);
+  --primary-foreground: oklch(0.99 0.01 155);
+  --secondary: oklch(0.96 0.03 158 / 0.72);
+  --secondary-foreground: oklch(0.25 0.05 158);
+  --muted: oklch(0.97 0.018 158 / 0.7);
+  --muted-foreground: oklch(0.49 0.025 158);
+  --accent: oklch(0.91 0.055 158 / 0.62);
+  --accent-foreground: oklch(0.25 0.06 158);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.84 0.035 158 / 0.72);
+  --input: oklch(0.84 0.035 158 / 0.72);
+  --ring: oklch(0.56 0.12 158 / 0.7);
   --radius: 0.625rem;
 }
 
@@ -35,18 +36,18 @@
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.68 0.14 158 / 0.86);
+  --primary-foreground: oklch(0.16 0.025 158);
+  --secondary: oklch(0.29 0.04 158 / 0.82);
+  --secondary-foreground: oklch(0.96 0.02 158);
+  --muted: oklch(0.25 0.025 158 / 0.82);
+  --muted-foreground: oklch(0.76 0.035 158);
+  --accent: oklch(0.34 0.06 158 / 0.82);
+  --accent-foreground: oklch(0.97 0.02 158);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(0.75 0.06 158 / 0.2);
+  --input: oklch(0.75 0.06 158 / 0.24);
+  --ring: oklch(0.68 0.14 158 / 0.7);
 }
 
 @theme inline {

@@ -43,10 +43,15 @@ export const documents = pgTable(
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
     chunkCount: integer("chunk_count").notNull().default(0),
-    status: text("status", { enum: ["processing", "ready", "failed"] })
+    status: text("status", { enum: ["pending", "processing", "ready", "failed"] })
       .notNull()
-      .default("processing"),
+      .default("pending"),
+    error: text("error"),
+    /** 上传时提取的原文，用于失败后不必重新上传即可重新入库。 */
+    sourceText: text("source_text"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    /** 软删除：有值表示已删除，列表查询默认过滤掉 */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [index("documents_tenant_idx").on(t.tenantId)]
 );

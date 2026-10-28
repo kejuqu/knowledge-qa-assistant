@@ -10,6 +10,7 @@ const splitter = new RecursiveCharacterTextSplitter({
 });
 
 export interface IngestInput {
+  /** 已解析的纯文本（由 @kqa/ai 的 extractText 在上传时完成，队列消费时直接传入） */
   text: string;
   documentId: string;
   filename: string;

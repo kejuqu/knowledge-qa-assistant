@@ -2,22 +2,21 @@
 
 import { useRef } from "react";
 import { Button } from "@kqa/ui/components/button";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload } from "lucide-react";
 import { ACCEPT_STRING } from "./use-document-upload";
 
 interface UploadButtonProps {
-  uploading: boolean;
   onSelect: (file: File) => void;
 }
 
-/** 顶部工具栏的上传按钮：内部封装隐藏 file input */
-export function UploadButton({ uploading, onSelect }: UploadButtonProps) {
+/** 顶部工具栏的上传按钮：内部封装隐藏 file input（进度条由 UploadProgressList 单独渲染） */
+export function UploadButton({ onSelect }: UploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <>
-      <Button onClick={() => inputRef.current?.click()} disabled={uploading}>
-        {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
+      <Button onClick={() => inputRef.current?.click()}>
+        <Upload />
         上传文档
       </Button>
       <input

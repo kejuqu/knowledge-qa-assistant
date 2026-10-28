@@ -93,7 +93,119 @@ pnpm dev
 ## 数据流
 
 ```
-上传文档 ──> PG documents 表（元数据）──> 切分+embedding ──> Milvus kqa_chunks 集合
-                                                              （metadata 带 ownerId 隔离租户）
-提问 ──> Milvus 按 ownerId 过滤检索 top-4 ──> 拼装 prompt ──> LLM 流式回答 + 引用来源 ──> 落库 messages
+上传文档 ──> PG documents 表（元数据，status=pending）──> Redis 队列异步消费
+                                                              │
+                                    ┌─────────────────────────┘
+                                    ▼
+                        切分 + embedding ──> Milvus kqa_chunks 集合
+                        （metadata 带 tenantId 隔离租户）
+                                    │
+                        status: pending → processing → ready / failed
+                                    │
+                        SSE（Redis pub/sub）实时推送状态到前端
+
+提问 ──> Milvus 按 tenantId 过滤检索 top-4 ──> 拼装 prompt ──> LLM 流式回答 + 引用来源 ──> 落库 messages
+```
+
+## 本地调试指南
+
+### 进入 Docker 查数据库
+
+```bash
+# 进入 Postgres 容器（交互式 psql）
+docker exec -it kqa-postgres psql -U kqa -d kqa
+
+# 常用 SQL（在 psql 里执行）
+\dt                              -- 列出所有表
+SELECT * FROM documents;          -- 查看文档（含 status / error 字段）
+SELECT * FROM documents WHERE status = 'failed';   -- 只看失败的
+SELECT * FROM tenants;
+SELECT * FROM tenant_members;
+
+# 不进入容器，直接在宿主机执行单条 SQL
+docker exec kqa-postgres psql -U kqa -d kqa -c "SELECT filename, status, error FROM documents;"
+
+# 查 Redis（队列和事件总线）
+docker exec -it kqa-redis redis-cli
+> llen kqa:document:queue         -- 队列里待处理的任务数
+> keys "kqa:document:processing:*"  -- 正在处理的任务锁
+> monitor                          -- 实时查看所有 Redis 命令（调试用）
+```
+
+### 文档处理失败怎么排查
+
+文档状态流转：`pending → processing → ready / failed`。失败原因存在 `documents.error` 字段。
+
+**第一步：看数据库里的错误信息**
+
+```bash
+docker exec kqa-postgres psql -U kqa -d kqa -c \
+  "SELECT filename, status, error FROM documents WHERE status='failed' ORDER BY created_at DESC;"
+```
+
+常见错误对照表：
+
+| error 内容 | 原因 | 解决办法 |
+| --- | --- | --- |
+| `Connection error.` | 网络连不上模型服务（国内直连 api.openai.com 会被墙） | 换国内可达的 OpenAI 兼容服务，或配代理 |
+| `Request timed out.` | 请求超时，可能是代理慢或服务不可用 | 检查代理，或换 Embedding 服务 |
+| `401 Unauthorized` | API Key 错误或失效 | 在「模型设置」页更新 key |
+| `文档解析失败：...` | 文件格式损坏或加密 | 换文件重试 |
+| `未解析出文本内容` | 扫描件 PDF（图片型），需要 OCR | 后续阶段支持 OCR |
+
+**第二步：检查模型服务是否可达**
+
+```bash
+# 测试 Embedding 服务连通性（以 OpenAI 为例）
+curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 10 \
+  https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $YOUR_API_KEY"
+
+# HTTP 000 = 完全连不上（网络被墙 / 无代理）
+# HTTP 401 = 连上了但 key 无效
+# HTTP 200 = 正常
+```
+
+**第三步：看服务端日志**
+
+```bash
+# dev server 日志里搜队列消费日志
+pnpm dev 2>&1 | grep "\[queue\]"
+
+# 正常应该看到：
+# [queue] consumer started, waiting for jobs...
+# [queue] job dequeued: {"documentId":"..."}
+# [queue] job done: <documentId>
+```
+
+### 国内网络环境推荐配置
+
+`api.openai.com` 在国内直连不通（表现为 `Connection error.`）。推荐用**硅基流动（SiliconFlow）**——国内可直接访问，同时提供 LLM 和 Embedding 模型，一个 key 搞定：
+
+```bash
+# .env 里改成（或登录后在「模型设置」页配置）
+LLM_BASE_URL=https://api.siliconflow.cn/v1
+LLM_API_KEY=sk-xxxxxxxx          # 在 https://cloud.siliconflow.cn 申请
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_API_KEY=sk-xxxxxxxx    # 同一个 key
+EMBEDDING_MODEL=BAAI/bge-m3      # 中文 embedding 效果好
+```
+
+其他可选：
+- **DeepSeek**：`https://api.deepseek.com/v1`（LLM 好，但无 embedding，需另配）
+- **本地 Ollama**：`http://localhost:11434/v1`（完全离线，先 `ollama pull bge-m3`）
+- **OpenAI + 代理**：配置 `HTTPS_PROXY` 环境变量
+
+### 清理测试数据
+
+```bash
+# 软删除所有文档（向量不删，后续可手动清）
+docker exec kqa-postgres psql -U kqa -d kqa -c \
+  "UPDATE documents SET deleted_at = now() WHERE deleted_at IS NULL;"
+
+# 重置整个数据库（会丢所有数据，包括用户）
+docker exec kqa-postgres psql -U kqa -d kqa -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+pnpm db:migrate
 ```
