@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, jsonb, index, unique } from "drizzle-orm/pg-core";
 
 /** 用户 —— 由 auth app 写入，web app 只读 */
 export const users = pgTable("users", {
@@ -9,11 +9,35 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** 员工上传的知识文档（向量本身存 Milvus，这里存元数据） */
+/** 租户（企业/团队）—— 数据隔离的边界 */
+export const tenants = pgTable("tenants", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** 租户成员：role 决定能否管理知识库/模型配置 */
+export const tenantMembers = pgTable(
+  "tenant_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique("tenant_members_tenant_user_uniq").on(t.tenantId, t.userId),
+    index("tenant_members_user_idx").on(t.userId),
+  ]
+);
+
+/** 员工上传的知识文档（向量本身存 Milvus，这里存元数据）；归属租户，ownerId 仅记录上传人 */
 export const documents = pgTable(
   "documents",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
     ownerId: uuid("owner_id").references(() => users.id).notNull(),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
@@ -24,7 +48,7 @@ export const documents = pgTable(
       .default("processing"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("documents_owner_idx").on(t.ownerId)]
+  (t) => [index("documents_tenant_idx").on(t.tenantId)]
 );
 
 /** 问答会话 */
@@ -55,10 +79,10 @@ export const messages = pgTable(
   (t) => [index("messages_conversation_idx").on(t.conversationId)]
 );
 
-/** 每用户/全局的模型配置：apiKey/baseURL 存这里，直接传给 LangChain 初始化 */
+/** 租户级模型配置：apiKey/baseURL 存这里，直接传给 LangChain 初始化；仅 admin 可改 */
 export const modelSettings = pgTable("model_settings", {
   id: uuid("id").defaultRandom().primaryKey(),
-  ownerId: uuid("owner_id").references(() => users.id).notNull().unique(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull().unique(),
   llmBaseUrl: text("llm_base_url").notNull(),
   llmApiKey: text("llm_api_key").notNull(),
   llmModel: text("llm_model").notNull(),
@@ -69,6 +93,8 @@ export const modelSettings = pgTable("model_settings", {
 });
 
 export type User = typeof users.$inferSelect;
+export type Tenant = typeof tenants.$inferSelect;
+export type TenantMember = typeof tenantMembers.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;

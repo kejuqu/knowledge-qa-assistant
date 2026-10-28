@@ -32,6 +32,7 @@ export default function SignUpPage() {
         email: form.get("email"),
         name: form.get("name"),
         password: form.get("password"),
+        tenantName: form.get("tenantName"),
       }),
     });
     const data = await res.json();
@@ -55,6 +56,10 @@ export default function SignUpPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenantName">企业/团队名称</Label>
+              <Input id="tenantName" name="tenantName" required placeholder="例如：Acme 科技" />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="name">姓名</Label>
               <Input id="name" name="name" required placeholder="张三" />

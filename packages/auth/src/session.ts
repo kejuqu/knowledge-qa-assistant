@@ -13,6 +13,9 @@ export interface SessionPayload {
   sub: string; // user id
   email: string;
   name: string;
+  tenantId: string;
+  tenantName: string;
+  role: "admin" | "member";
 }
 
 function getSecret() {
@@ -26,7 +29,13 @@ export function getCookieDomain() {
 }
 
 export async function signSession(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ email: payload.email, name: payload.name })
+  return new SignJWT({
+    email: payload.email,
+    name: payload.name,
+    tenantId: payload.tenantId,
+    tenantName: payload.tenantName,
+    role: payload.role,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -37,11 +46,15 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    if (!payload.sub) return null;
+    // 老版本 token（无租户字段）视为无效，强制重新登录
+    if (!payload.sub || !payload.tenantId) return null;
     return {
       sub: payload.sub,
       email: payload.email as string,
       name: payload.name as string,
+      tenantId: payload.tenantId as string,
+      tenantName: payload.tenantName as string,
+      role: payload.role as "admin" | "member",
     };
   } catch {
     return null;

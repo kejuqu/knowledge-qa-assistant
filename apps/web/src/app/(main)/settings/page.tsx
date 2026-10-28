@@ -21,6 +21,7 @@ interface ModelSettings {
   embeddingBaseUrl: string;
   embeddingApiKey: string;
   embeddingModel: string;
+  role: "admin" | "member";
 }
 
 const FIELDS: Array<{ key: keyof ModelSettings; label: string; hint: string; secret?: boolean }> = [
@@ -50,12 +51,17 @@ export default function SettingsPage() {
     if (!form) return;
     setSaving(true);
     setSaved(false);
-    await fetch("/api/settings", {
+    const res = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
     setSaving(false);
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error ?? "保存失败");
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -93,10 +99,19 @@ export default function SettingsPage() {
                 {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
               </div>
             ))}
-            <Button onClick={save} disabled={saving} className="w-full">
+            <Button
+              onClick={save}
+              disabled={saving || form.role !== "admin"}
+              className="w-full"
+            >
               {saving ? <Loader2 className="animate-spin" /> : <Save />}
               {saved ? "已保存 ✓" : "保存配置"}
             </Button>
+            {form.role !== "admin" && (
+              <p className="text-center text-xs text-muted-foreground">
+                模型配置是租户级资产，仅管理员可修改
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -13,7 +13,7 @@ export interface IngestInput {
   text: string;
   documentId: string;
   filename: string;
-  ownerId: string;
+  tenantId: string;
 }
 
 /** 文档入库：切分 -> embedding -> 写入 Milvus，返回 chunk 数 */
@@ -28,7 +28,7 @@ export async function ingestDocument(input: IngestInput, config: ModelConfig): P
         metadata: {
           documentId: input.documentId,
           filename: input.filename,
-          ownerId: input.ownerId,
+          tenantId: input.tenantId,
           chunkIndex: i,
         },
       })

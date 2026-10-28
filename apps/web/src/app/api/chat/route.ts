@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, conversations, messages } from "@kqa/db";
 import { getSessionUser } from "@kqa/auth/next";
 import { streamRagAnswer } from "@kqa/ai";
-import { getModelConfigForUser } from "@/lib/model-config";
+import { getModelConfigForTenant } from "@/lib/model-config";
 
 /**
  * POST /api/chat
@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
   await db.insert(messages).values({ conversationId: convId, role: "user", content: message });
 
-  const config = await getModelConfigForUser(user.sub);
-  const { stream, citations } = await streamRagAnswer(message, user.sub, config);
+  const config = await getModelConfigForTenant(user.tenantId);
+  const { stream, citations } = await streamRagAnswer(message, user.tenantId, config);
 
   const metaLine = JSON.stringify({ conversationId: convId, citations }) + "\n";
   const encoder = new TextEncoder();

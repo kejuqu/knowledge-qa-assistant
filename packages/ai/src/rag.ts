@@ -52,17 +52,18 @@ function toCitations(docs: Document[]): RagResult["citations"] {
 /** 流式 RAG 问答：返回 token 流 + 引用（引用在检索后即可确定，先行返回） */
 export async function streamRagAnswer(
   question: string,
-  ownerId: string,
+  tenantId: string,
   config: ModelConfig
 ): Promise<{ stream: AsyncIterable<string>; citations: RagResult["citations"] }> {
   const embeddings = createEmbeddings(config);
   const store = await getVectorStore(embeddings);
 
-  // 按 ownerId 过滤（Milvus 标量过滤表达式），只检索当前用户上传的文档
+  // 权限过滤前置到检索阶段：Milvus 标量过滤表达式只召回本租户的 chunk，
+  // LLM 的上下文里根本不会出现越权数据
   const docs = (await store.similaritySearch(
     question,
     4,
-    `ownerId == "${ownerId}"`
+    `tenantId == "${tenantId}"`
   )) as Document[];
 
   const chain = RunnableSequence.from([

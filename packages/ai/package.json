@@ -8,7 +8,8 @@
     "./models": "./src/models.ts",
     "./vector-store": "./src/vector-store.ts",
     "./rag": "./src/rag.ts",
-    "./ingest": "./src/ingest.ts"
+    "./ingest": "./src/ingest.ts",
+    "./parsers": "./src/parsers.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.3.45",
@@ -16,10 +17,14 @@
     "@langchain/openai": "^0.5.10",
     "@langchain/textsplitters": "^0.1.0",
     "@zilliz/milvus2-sdk-node": "^2.5.7",
-    "langchain": "^0.3.29"
+    "cheerio": "^1.0.0",
+    "langchain": "^0.3.29",
+    "mammoth": "^1.9.0",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@kqa/tsconfig": "workspace:*",
+    "@types/pdf-parse": "^1.1.5",
     "typescript": "^5.8.0"
   }
 }
