@@ -107,6 +107,91 @@ pnpm dev
 提问 ──> Milvus 按 tenantId 过滤检索 top-4 ──> 拼装 prompt ──> LLM 流式回答 + 引用来源 ──> 落库 messages
 ```
 
+---
+
+## 企业级功能蓝图（Roadmap）
+
+> 按优先级排序，`✅` 表示已实现，`🔲` 表示待开发。
+
+### 一、知识库与文档管理（数据入口）
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 多格式文档解析 | ✅ | PDF (pdf-parse) / docx (mammoth) / HTML (cheerio) / MD / TXT，插件式 `extractText()` |
+| 异步解析与向量化 | ✅ | 上传即返回（202），Redis List 队列后台串行消费，SSE 推送状态 |
+| 上传进度条 | ✅ | XMLHttpRequest `upload.onprogress`，0-90% 上传、90-100% 服务端处理 |
+| 切块参数可配置 | 🔲 | 当前固定 800/120 字符，需支持管理员按知识库配置 chunkSize / overlap |
+| 软删除 | ✅ | `deleted_at` 字段，列表查询自动过滤，同步物理删 Milvus 向量 |
+| 失败重试 | 🔲 | 当前需手动重新上传，需加"重试"按钮复用队列 |
+| 元数据 JSONB（部门/密级/版本） | 🔲 | 需扩展 `documents` 表加 `metadata jsonb` 字段 |
+| 审核发布流转 | 🔲 | 状态机：draft → pending_review → published → archived，仅 published 进检索 |
+| 文档模糊搜索 | 🔲 | PG `ILIKE` 或全文检索实现 |
+| OCR（扫描件 PDF） | 🔲 | 预留扩展点：`extractText()` 的 pdf 分支加 OCR 调用（PaddleOCR / VLM） |
+| 索引重建 | 🔲 | 需手动触发重新向量化（当前删除后重新上传即可） |
+
+### 二、RAG 检索与生成链路
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 向量检索（语义召回） | ✅ | Milvus `similaritySearch`，按 `tenantId` 过滤，top-4 |
+| 流式生成（SSE） | ✅ | `/api/chat` 返回 ReadableStream，逐 token 推送给前端 |
+| 引用来源展示 | ✅ | 回答附 `{ documentId, filename, chunkIndex }`，前端展示引用卡片 |
+| 混合检索（BM25 + 向量） | 🔲 | 向量路走 Milvus；关键词路用 PG `tsvector` 全文检索，RRF 融合排序 |
+| Rerank 精排 | 🔲 | 融合后接 BGE Rerank（CPU 可跑），进一步压缩上下文 |
+| 拒答机制 | 🔲 | 相似度低于阈值时明确拒答，而不是让 LLM 编造 |
+| 多轮对话记忆 | 🔲 | 当前只传当前问题，需加 ConversationSummary 压缩历史 |
+| 检索过程可视化 | 🔲 | 调试页展示各阶段召回结果和分数，便于调参 |
+
+### 三、问答交互界面
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 流式输出 | ✅ | SSE 逐字返回，降低感知延迟 |
+| 多会话管理 | ✅ | 会话列表、切换、历史消息加载 |
+| 会话重命名 | 🔲 | 当前标题取问题前 20 字，需支持手动改名 |
+| 会话删除 | 🔲 | 需加删除按钮，清理对应 messages |
+| 会话 24 小时过期 | 🔲 | 需加定时任务清理过期会话 |
+| 检索可视化 | 🔲 | 同"二、检索过程可视化" |
+
+### 四、权限、审计与安全
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| JWT + RBAC | ✅ | 角色 `admin` / `member`，JWT payload 携带 `tenantId` / `role` |
+| 租户数据隔离 | ✅ | 检索时 Milvus `tenantId` 过滤，LLM 上下文里无越权数据 |
+| 模型配置权限 | ✅ | 仅 admin 可改模型配置（apiKey/baseURL 等） |
+| 文档可见性（部门/私有/指定角色） | 🔲 | 当前同租户全员可见，需加 `visibility` 字段和过滤逻辑 |
+| 审计日志 | 🔲 | 需加 `audit_logs` 表，记录问答请求、检索结果、管理操作，支持 CSV 导出 |
+| 输入安全 | ✅ | 文件类型白名单、20MB 大小限制、文件名安全清洗 |
+
+### 五、管理后台（/admin）
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 知识库配置面板 | 🔲 | 切块参数、Embedding 模型选择、top-k / 阈值设置 |
+| 文档审核队列 | 🔲 | 待审核列表、通过/驳回操作、并发防重 |
+| 索引重建按钮 | 🔲 | 手动触发重新向量化 |
+| 检索调试页 | 🔲 | 输入 query，展示向量召回、BM25、Rerank 各阶段分数 |
+| 评估指标 | 🔲 | 内置 50 道标准问题，计算 Hit@k / MRR |
+
+### 向量存储选型：Milvus vs pgvector
+
+| 维度 | Milvus（本项目选用） | pgvector |
+| --- | --- | --- |
+| 性能 | 亿级向量，专用索引（HNSW/IVF） | 千万级以内够用 |
+| 部署 | 独立服务（etcd + minio） | PG 插件，零额外组件 |
+| 元数据过滤 | 标量字段过滤，表达式强大 | JSONB + WHERE，灵活但性能一般 |
+| 适用场景 | 多租户、大规模、高并发 | 中小规模、运维极简 |
+
+本项目选择 Milvus 原因：
+- 多租户场景下标量过滤（`tenantId`）性能好
+- 与 LangChain `Milvus` 集成成熟，支持 metadata 过滤
+- 文章教学价值高（独立向量库 vs PG 插件的架构对比）
+
+**混合检索路线**（Milvus 方案）：向量路走 Milvus `similaritySearch`；关键词路用 PG 全文检索（`tsvector` + `websearch_to_tsquery`）；两路结果在应用层 RRF 融合，最后接 Rerank。
+
+---
+
 ## 本地调试指南
 
 ### 进入 Docker 查数据库

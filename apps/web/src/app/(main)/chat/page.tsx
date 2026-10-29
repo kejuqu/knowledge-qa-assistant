@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@kqa/ui/components/button";
-import { Textarea } from "@kqa/ui/components/textarea";
-import { Send, Bot, User as UserIcon, FileText, Sparkles } from "lucide-react";
+import { MessageScroller } from "@shadcn/react/message-scroller";
+import { TooltipHint } from "@kqa/ui/components/tooltip";
+import { Skeleton } from "@kqa/ui/components/skeleton";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@kqa/ui/components/input-group";
+import { ArrowDown, ArrowUp, Bot, FileText, Plus, Sparkles, User as UserIcon } from "lucide-react";
+import { ModelSelector } from "@/components/chat/model-selector";
+import { KnowledgeBaseSelector, type KnowledgeBaseDocument } from "@/components/chat/knowledge-base-selector";
+import { ACCEPT_STRING, useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useChatStore } from "@/stores/chat-store";
+import { useSidebar } from "@kqa/ui/components/sidebar";
 
 interface Message {
   id: string;
@@ -23,20 +35,54 @@ interface PendingMessage {
   serverMessageId?: string;
 }
 
+interface ModelSettings {
+  llmModel: string;
+}
+
 export default function ChatPage() {
-  const { activeConversationId, setActiveConversation, streaming, setStreaming } =
+  return <Suspense fallback={<ChatHistorySkeleton />}><ChatContent /></Suspense>;
+}
+
+function ChatContent() {
+  const searchParams = useSearchParams();
+  const activeConversationId = searchParams.get("id");
+  const { setActiveConversation, streaming, setStreaming } =
     useChatStore();
+  useEffect(() => { setActiveConversation(activeConversationId); }, [activeConversationId, setActiveConversation]);
   const [input, setInput] = useState("");
   const [liveAnswer, setLiveAnswer] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [sendError, setSendError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedKnowledgeBaseIds, setSelectedKnowledgeBaseIds] = useState<string[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const { upload, tasks: uploadTasks, error: uploadError } = useDocumentUpload();
 
-  const { data: history = [] } = useQuery<Message[]>({
+  const { data: modelSettings } = useQuery<ModelSettings>({
+    queryKey: ["chat-model"],
+    queryFn: () => fetch("/api/settings").then((response) => response.json()),
+  });
+
+  const { data: knowledgeBaseDocuments = [] } = useQuery<KnowledgeBaseDocument[]>({
+    queryKey: ["documents"],
+    queryFn: () => fetch("/api/documents").then((response) => response.json()),
+  });
+
+  const availableModels = useMemo(
+    () => [{ value: modelSettings?.llmModel || "default", label: modelSettings?.llmModel || "默认模型" }],
+    [modelSettings?.llmModel]
+  );
+  const activeModel = selectedModel || availableModels[0].value;
+
+  const { data: history = [], isLoading: isHistoryLoading, error: historyError } = useQuery<Message[]>({
     queryKey: ["messages", activeConversationId],
     queryFn: () =>
-      fetch(`/api/conversations/${activeConversationId}/messages`).then((r) => r.json()),
+      fetch(`/api/conversations/${activeConversationId}/messages`).then(async (r) => {
+        if (!r.ok) throw new Error("加载对话失败");
+        return r.json();
+      }),
     enabled: !!activeConversationId,
   });
 
@@ -53,14 +99,10 @@ export default function ChatPage() {
   );
   const hasVisibleMessages = visibleHistory.length > 0 || visiblePendingMessages.length > 0;
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [visibleHistory.length, visiblePendingMessages.length, liveAnswer]);
-
   async function send() {
     const message = input.trim();
     if (!message || streaming) return;
-    const pendingId = `pending-${crypto.randomUUID()}`;
+    const pendingId = `pending-${createPendingMessageId()}`;
     const requestConversationId = activeConversationId;
     setInput("");
     setSendError("");
@@ -77,7 +119,11 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: requestConversationId, message }),
+        body: JSON.stringify({
+          conversationId: requestConversationId,
+          message,
+          documentIds: selectedKnowledgeBaseIds,
+        }),
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => null);
@@ -117,7 +163,10 @@ export default function ChatPage() {
                 : pending
             )
           );
-          if (!requestConversationId) setActiveConversation(meta.conversationId);
+          if (!requestConversationId) {
+            window.history.replaceState(null, "", `/chat?id=${encodeURIComponent(meta.conversationId)}`);
+            setActiveConversation(meta.conversationId);
+          }
         }
         if (buffer) {
           answer += buffer;
@@ -144,68 +193,195 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      {/* 消息区 */}
-      <div className="flex flex-1 flex-col">
-        <div className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
-          <div className="mx-auto max-w-3xl space-y-7">
-            {!hasVisibleMessages && !streaming && (
-              <div className="flex min-h-[50vh] flex-col items-center justify-center pb-20 text-center">
-                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-emerald-700/10 bg-white/65 text-primary shadow-[0_18px_40px_-26px_rgba(13,109,76,0.6)] backdrop-blur">
+    <div className="chat-page flex h-[calc(100dvh-4rem)] flex-col overflow-hidden md:h-dvh">
+      <MobileNewConversationButton />
+      <MessageScroller.Provider autoScroll defaultScrollPosition="last-anchor">
+        <MessageScroller.Root className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <MessageScroller.Viewport
+            id="chat-messages"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-8 sm:px-10"
+            aria-label="问答消息"
+          >
+            <MessageScroller.Content className="mx-auto flex w-full max-w-3xl flex-col gap-7" aria-busy={streaming}>
+              {historyError && <p role="alert" className="text-center text-sm text-destructive">无法加载对话，可能已被删除或暂时不可用。</p>}
+              {isHistoryLoading && (
+                <MessageScroller.Item messageId="history-loading">
+                  <ChatHistorySkeleton />
+                </MessageScroller.Item>
+              )}
+              {!historyError && !isHistoryLoading && !hasVisibleMessages && !streaming && (
+                <MessageScroller.Item messageId="empty-state">
+                  <div className="flex min-h-[50vh] flex-col items-center justify-center pb-20 text-center">
+                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-card text-primary shadow-sm">
                   <Sparkles className="size-5" />
                 </div>
-                <p className="text-base font-medium text-emerald-950/80">从知识库开始一场对话</p>
+                <p className="text-base font-medium text-foreground">从知识库开始一场对话</p>
                 <p className="mt-1.5 text-sm text-muted-foreground">上传文档后，向我提问即可获得基于资料的回答</p>
-              </div>
-            )}
-            {visibleHistory.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            {visiblePendingMessages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            {streaming && (
-              <MessageBubble
-                message={{ id: "live", role: "assistant", content: liveAnswer || "正在思考…" }}
-              />
-            )}
-            {sendError && <p className="text-center text-sm text-destructive">{sendError}</p>}
-            <div ref={bottomRef} />
-          </div>
-        </div>
+                  </div>
+                </MessageScroller.Item>
+              )}
+              {!isHistoryLoading && visibleHistory.map((message) => (
+                <MessageScroller.Item
+                  key={message.id}
+                  messageId={message.id}
+                  scrollAnchor={message.role === "user"}
+                >
+                  <MessageBubble message={message} />
+                </MessageScroller.Item>
+              ))}
+              {visiblePendingMessages.map((message) => (
+                <MessageScroller.Item key={message.id} messageId={message.id} scrollAnchor>
+                  <MessageBubble message={message} />
+                </MessageScroller.Item>
+              ))}
+              {streaming && (
+                <MessageScroller.Item messageId="live-answer">
+                  <MessageBubble
+                    message={{ id: "live", role: "assistant", content: liveAnswer || "正在思考…" }}
+                  />
+                </MessageScroller.Item>
+              )}
+              {sendError && (
+                <MessageScroller.Item messageId="send-error">
+                  <p className="text-center text-sm text-destructive">{sendError}</p>
+                </MessageScroller.Item>
+              )}
+            </MessageScroller.Content>
+          </MessageScroller.Viewport>
+          <MessageScroller.Button className="absolute bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-background px-3 py-1.5 text-xs font-medium shadow-sm inert:hidden">
+            <ArrowDown className="size-3" />
+            回到最新消息
+          </MessageScroller.Button>
+        </MessageScroller.Root>
 
-        {/* 输入区 */}
-        <div className="border-t border-emerald-950/10 bg-white/30 px-6 py-4 backdrop-blur-xl sm:px-10">
-          <div className="mx-auto max-w-3xl">
-            <div className="flex items-end gap-2 rounded-2xl border border-emerald-700/15 bg-white/75 p-1.5 shadow-[0_16px_36px_-24px_rgba(10,92,63,0.6)] transition-all duration-200 focus-within:border-emerald-600/30 focus-within:bg-white/90 focus-within:shadow-[0_18px_40px_-22px_rgba(10,119,80,0.42)]">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
+        <div className="shrink-0 px-4 pb-5 pt-3 sm:px-10 sm:pb-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <form
+              ref={formRef}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void send();
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPT_STRING}
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void upload(file);
+                  event.target.value = "";
                 }}
-                placeholder="输入问题，Enter 发送，Shift+Enter 换行"
-                className="min-h-11 max-h-36 resize-none border-0 bg-transparent px-3 py-2.5 shadow-none focus-visible:ring-0"
               />
-              <Button
-                onClick={send}
-                disabled={streaming || !input.trim()}
-                size="icon"
-                className="mb-0.5 size-10 shrink-0 rounded-xl shadow-[0_8px_18px_-10px_rgba(8,113,76,0.8)]"
-                aria-label="发送消息"
-              >
-                <Send className="size-4" />
-              </Button>
-            </div>
-            <p className="px-2 pt-2 text-[11px] text-muted-foreground/80">Enter 发送 · Shift + Enter 换行</p>
+              <InputGroup className="chat-composer h-36 gap-2 rounded-3xl border-0 p-4">
+                <InputGroupTextarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      formRef.current?.requestSubmit();
+                    }
+                  }}
+                  placeholder="输入问题…"
+                  aria-label="输入问题"
+                  className="chat-composer-input min-h-0 p-0"
+                />
+                <InputGroupAddon align="block-end" className="gap-3 p-0">
+                  <TooltipHint content="上传知识库">
+                    <span className="inline-flex shrink-0" tabIndex={uploadTasks.length > 0 ? 0 : undefined}>
+                      <InputGroupButton
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="chat-composer-upload size-10 shrink-0 rounded-full"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadTasks.length > 0}
+                        aria-label="上传知识库文档"
+                      >
+                        <Plus data-icon="inline-start" />
+                      </InputGroupButton>
+                    </span>
+                  </TooltipHint>
+                  <div className="ml-auto min-w-0">
+                    <KnowledgeBaseSelector
+                      documents={knowledgeBaseDocuments}
+                      selectedIds={selectedKnowledgeBaseIds}
+                      onSelectedIdsChange={setSelectedKnowledgeBaseIds}
+                      disabled={streaming}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <ModelSelector
+                      models={availableModels}
+                      value={activeModel}
+                      onValueChange={setSelectedModel}
+                      disabled={streaming}
+                    />
+                  </div>
+                  <TooltipHint content="发送消息 · Enter 发送，Shift+Enter 换行">
+                    <span className="inline-flex shrink-0" tabIndex={streaming || !input.trim() ? 0 : undefined}>
+                      <InputGroupButton
+                        type="submit"
+                        variant="default"
+                        disabled={streaming || !input.trim()}
+                        size="icon-sm"
+                        className="chat-composer-send size-10 shrink-0 rounded-full shadow-none"
+                        aria-label="发送消息"
+                        aria-keyshortcuts="Enter"
+                      >
+                        <ArrowUp data-icon="inline-start" />
+                      </InputGroupButton>
+                    </span>
+                  </TooltipHint>
+                </InputGroupAddon>
+              </InputGroup>
+            </form>
+            {(uploadTasks[0] || uploadError) && (
+              <p className={uploadError ? "px-2 pt-1 text-xs text-destructive" : "px-2 pt-1 text-xs text-muted-foreground"}>
+                {uploadError || `正在上传知识库文档：${uploadTasks[0].name}`}
+              </p>
+            )}
           </div>
         </div>
-      </div>
+      </MessageScroller.Provider>
     </div>
   );
+}
+
+function MobileNewConversationButton() {
+  const router = useRouter();
+  const { isMobile, mobileOpen } = useSidebar();
+  const { setActiveConversation, streaming } = useChatStore();
+
+  if (!isMobile || mobileOpen) return null;
+
+  return (
+    <TooltipHint content="新建对话" side="bottom">
+      <button
+        type="button"
+        className="fixed right-3 top-3 z-30 flex size-10 items-center justify-center rounded-xl bg-card text-foreground shadow-md transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={streaming}
+        onClick={() => {
+          setActiveConversation(null);
+          router.push("/chat");
+        }}
+        aria-label="新建对话"
+      >
+        <Plus className="size-5" />
+      </button>
+    </TooltipHint>
+  );
+}
+
+function createPendingMessageId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  // 仅用于浏览器内的乐观消息占位；服务端消息仍使用数据库生成的 UUID。
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function MessageBubble({ message }: { message: Message }) {
@@ -215,22 +391,22 @@ function MessageBubble({ message }: { message: Message }) {
       <div
         className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
           isUser
-            ? "bg-primary text-primary-foreground shadow-[0_8px_18px_-11px_rgba(7,111,74,0.9)]"
-            : "border border-emerald-950/8 bg-white/65 text-primary shadow-[0_8px_20px_-15px_rgba(14,88,61,0.35)]"
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "bg-card text-primary shadow-sm"
         }`}
       >
         {isUser ? <UserIcon className="size-4" /> : <Bot className="size-4" />}
       </div>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-[0_12px_28px_-22px_rgba(15,91,64,0.55)] ${
+        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
           isUser
             ? "rounded-tr-md bg-primary text-primary-foreground"
-            : "rounded-tl-md border border-emerald-950/8 bg-white/70 text-foreground backdrop-blur-sm"
+            : "rounded-tl-md bg-card text-foreground"
         }`}
       >
         <p className="whitespace-pre-wrap">{message.content}</p>
         {message.citations && message.citations.length > 0 && (
-          <div className="mt-2 border-t border-border/50 pt-2 text-xs opacity-80">
+          <div className="mt-2 pt-2 text-xs opacity-80">
             <p className="mb-1 font-medium">引用来源：</p>
             {message.citations.map((c, i) => (
               <span key={i} className="mr-2 inline-flex items-center gap-1">
@@ -241,6 +417,27 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ChatHistorySkeleton() {
+  const rows = ["user-one", "assistant-one", "user-two", "assistant-two", "user-three"] as const;
+
+  return (
+    <div className="flex flex-col gap-7" aria-label="正在加载消息" role="status">
+      {rows.map((row, index) => {
+        const isUser = index % 2 === 0;
+        return (
+          <div key={row} className={`flex gap-3.5 ${isUser ? "flex-row-reverse" : ""}`}>
+            <Skeleton className="size-8 shrink-0 rounded-full" />
+            <div className={`flex flex-col gap-2 rounded-2xl p-4 ${isUser ? "w-2/5 rounded-tr-md" : "w-3/5 rounded-tl-md bg-card"}`}>
+              <Skeleton className="h-4 w-full" />
+              {!isUser && <Skeleton className="h-4 w-3/5" />}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

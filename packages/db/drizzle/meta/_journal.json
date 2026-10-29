@@ -15,6 +15,13 @@
       "when": 1793173451128,
       "tag": "0001_typical_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793245411648,
+      "tag": "0002_shiny_absorbing_man",
+      "breakpoints": true
     }
   ]
 }

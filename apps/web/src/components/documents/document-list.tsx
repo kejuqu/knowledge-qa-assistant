@@ -4,6 +4,17 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardDescription, CardHeader, CardTitle } from "@kqa/ui/components/card";
 import { Button } from "@kqa/ui/components/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@kqa/ui/components/alert-dialog";
 import { FileText, Loader2, CheckCircle2, XCircle, Clock, Trash2, RotateCw } from "lucide-react";
 
 export interface DocumentItem {
@@ -42,24 +53,29 @@ export function DocumentCard({ doc }: { doc: DocumentItem }) {
   const meta = STATUS_META[doc.status];
   const canDelete = doc.status === "ready" || doc.status === "failed";
   const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const queryClient = useQueryClient();
 
   async function handleDelete() {
-    if (!canDelete || deleting) return;
+    if (!canDelete || deleting) return false;
     setDeleting(true);
-    const res = await fetch(`/api/documents/${doc.id}`, { method: "DELETE" });
-    setDeleting(false);
-    if (!res.ok) {
-      const data = await res.json();
-      alert(data.error ?? "删除失败");
-      return;
+    try {
+      const res = await fetch(`/api/documents/${doc.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "删除失败");
+      }
+      queryClient.setQueryData<Array<Record<string, unknown>>>(
+        ["documents"], (old) => old?.filter((d) => d.id !== doc.id) ?? old
+      );
+      return true;
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "删除失败");
+      return false;
+    } finally {
+      setDeleting(false);
     }
-    // SSE 会推送 document:deleted，这里立即本地移除，避免等事件
-    queryClient.setQueryData<Array<Record<string, unknown>>>(
-      ["documents"],
-      (old) => old?.filter((d) => d.id !== doc.id) ?? old
-    );
   }
 
   async function handleRetry() {
@@ -110,20 +126,47 @@ export function DocumentCard({ doc }: { doc: DocumentItem }) {
             </Button>
           )}
           {canDelete && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground hover:text-destructive"
-              disabled={deleting}
-              onClick={handleDelete}
-              title={deleting ? "删除中…" : "删除文档"}
+            <AlertDialog
+              open={deleteOpen}
+              onOpenChange={(open) => {
+                if (!deleting) setDeleteOpen(open);
+              }}
             >
-              {deleting ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="size-3.5" />
-              )}
-            </Button>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-destructive"
+                  disabled={deleting}
+                  title={deleting ? "删除中…" : "删除文档"}
+                  aria-label="删除文档"
+                >
+                  {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>删除文档？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    删除“{doc.filename}”后将无法恢复，相关知识库内容也会一并移除。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogAction
+                    disabled={deleting}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleDelete().then((deleted) => {
+                        if (deleted) setDeleteOpen(false);
+                      });
+                    }}
+                  >
+                    {deleting ? "删除中…" : "删除"}
+                  </AlertDialogAction>
+                  <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </CardHeader>

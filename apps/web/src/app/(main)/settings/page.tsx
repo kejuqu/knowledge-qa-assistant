@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@kqa/ui/components/button";
 import { Input } from "@kqa/ui/components/input";
 import { Label } from "@kqa/ui/components/label";
+import { Skeleton } from "@kqa/ui/components/skeleton";
 import {
   Card,
   CardContent,
@@ -67,11 +68,7 @@ export default function SettingsPage() {
   }
 
   if (!form) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <SettingsSkeleton />;
   }
 
   return (
@@ -81,7 +78,7 @@ export default function SettingsPage() {
         <p className="mb-6 text-sm text-muted-foreground">
           任何 OpenAI 兼容协议的服务都能接入（OpenAI / DeepSeek / Ollama 本地模型 / 企业网关）
         </p>
-        <Card>
+        <Card className="border-0 bg-transparent shadow-none">
           <CardHeader>
             <CardTitle className="text-base">LangChain 模型配置</CardTitle>
             <CardDescription>保存后立即对问答与文档向量化生效</CardDescription>
@@ -112,6 +109,35 @@ export default function SettingsPage() {
                 模型配置是租户级资产，仅管理员可修改
               </p>
             )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSkeleton() {
+  return (
+    <div className="p-6" aria-label="正在加载模型设置" role="status">
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardHeader className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-4 w-2/3" />
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {FIELDS.map((field) => (
+              <div key={field.key} className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-3 w-3/5" />
+              </div>
+            ))}
+            <Skeleton className="h-9 w-full" />
           </CardContent>
         </Card>
       </div>

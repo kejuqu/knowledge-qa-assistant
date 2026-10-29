@@ -1,25 +1,34 @@
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db, conversations, messages } from "@kqa/db";
+import { db, conversations, documents, messages } from "@kqa/db";
 import { getSessionUser } from "@kqa/auth/next";
 import { streamRagAnswer } from "@kqa/ai";
 import { getModelConfigForTenant } from "@/lib/model-config";
 
 /**
  * POST /api/chat
- * body: { conversationId?: string, message: string }
+ * body: { conversationId?: string, message: string, documentIds?: string[] }
  * 响应：text/plain 流（首个 chunk 前先发一行 JSON 元信息：会话、用户消息和引用 ID）
  */
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { conversationId, message } = await request.json();
+  const { conversationId, message, documentIds } = await request.json();
   if (!message?.trim()) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
 
   // 没有会话就新建，标题取问题前 20 字
   let convId = conversationId as string | undefined;
+  if (convId) {
+    if (typeof convId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(convId)) {
+      return NextResponse.json({ error: "invalid id" }, { status: 400 });
+    }
+    const [conversation] = await db.select({ id: conversations.id }).from(conversations)
+      .where(and(eq(conversations.id, convId), eq(conversations.ownerId, user.sub))).limit(1);
+    if (!conversation) return NextResponse.json({ error: "对话不存在" }, { status: 404 });
+  }
   if (!convId) {
     const [conv] = await db
       .insert(conversations)
@@ -33,8 +42,24 @@ export async function POST(request: Request) {
     .values({ conversationId: convId, role: "user", content: message })
     .returning({ id: messages.id });
 
+  const requestedDocumentIds = Array.isArray(documentIds)
+    ? documentIds.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 50)
+    : [];
+  const permittedDocumentIds = requestedDocumentIds.length
+    ? (await db.select({ id: documents.id }).from(documents).where(and(
+        eq(documents.tenantId, user.tenantId),
+        isNull(documents.deletedAt),
+        eq(documents.status, "ready"),
+        inArray(documents.id, requestedDocumentIds)
+      ))).map((document) => document.id)
+    : [];
   const config = await getModelConfigForTenant(user.tenantId);
-  const { stream, citations } = await streamRagAnswer(message, user.tenantId, config);
+  const { stream, citations } = await streamRagAnswer(
+    message,
+    user.tenantId,
+    config,
+    requestedDocumentIds.length ? permittedDocumentIds : null
+  );
 
   const metaLine = JSON.stringify({
     conversationId: convId,

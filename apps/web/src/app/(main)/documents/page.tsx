@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@kqa/ui/components/skeleton";
 import { UploadButton } from "@/components/documents/upload-button";
 import { EmptyState } from "@/components/documents/empty-state";
 import { DocumentList, type DocumentItem } from "@/components/documents/document-list";
@@ -13,7 +14,7 @@ export default function DocumentsPage() {
   // SSE：服务端处理状态变更实时推送到 TanStack Query 缓存
   useDocumentEvents();
 
-  const { data: docs = [] } = useQuery<DocumentItem[]>({
+  const { data: docs = [], isLoading } = useQuery<DocumentItem[]>({
     queryKey: ["documents"],
     queryFn: () => fetch("/api/documents").then((r) => r.json()),
   });
@@ -35,12 +36,31 @@ export default function DocumentsPage() {
 
         <UploadProgressList tasks={tasks} />
 
-        {docs.length === 0 && tasks.length === 0 ? (
+        {isLoading ? (
+          <DocumentListSkeleton />
+        ) : docs.length === 0 && tasks.length === 0 ? (
           <EmptyState onSelect={upload} />
         ) : (
           <DocumentList docs={docs} />
         )}
       </div>
+    </div>
+  );
+}
+
+function DocumentListSkeleton() {
+  return (
+    <div className="flex flex-col gap-2" aria-label="正在加载文档" role="status">
+      {["first", "second", "third"].map((key) => (
+        <div key={key} className="flex items-center gap-3 rounded-xl bg-card p-4">
+          <Skeleton className="size-5 shrink-0 rounded" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-3/5" />
+          </div>
+          <Skeleton className="h-4 w-12" />
+        </div>
+      ))}
     </div>
   );
 }

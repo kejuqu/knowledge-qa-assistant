@@ -53,18 +53,20 @@ function toCitations(docs: Document[]): RagResult["citations"] {
 export async function streamRagAnswer(
   question: string,
   tenantId: string,
-  config: ModelConfig
+  config: ModelConfig,
+  documentIds: string[] | null = null
 ): Promise<{ stream: AsyncIterable<string>; citations: RagResult["citations"] }> {
   const embeddings = createEmbeddings(config);
   const store = await getVectorStore(embeddings);
 
   // 权限过滤前置到检索阶段：Milvus 标量过滤表达式只召回本租户的 chunk，
   // LLM 的上下文里根本不会出现越权数据
-  const docs = (await store.similaritySearch(
-    question,
-    4,
-    `tenantId == "${tenantId}"`
-  )) as Document[];
+  const documentFilter = documentIds === null
+    ? ""
+    : documentIds.length === 0
+      ? ' && documentId == "__no_permitted_document__"'
+      : ` && documentId in [${documentIds.map((id) => `"${id}"`).join(",")}]`;
+  const docs = (await store.similaritySearch(question, 4, `tenantId == "${tenantId}"${documentFilter}`)) as Document[];
 
   const chain = RunnableSequence.from([
     { context: new RunnablePassthrough(), question: new RunnablePassthrough() },

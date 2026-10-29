@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, unique } from "drizzle-orm/pg-core";
 
 /** 用户 —— 由 auth app 写入，web app 只读 */
 export const users = pgTable("users", {
@@ -63,6 +63,7 @@ export const conversations = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     ownerId: uuid("owner_id").references(() => users.id).notNull(),
     title: text("title").notNull().default("新的对话"),
+    pinned: boolean("pinned").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("conversations_owner_idx").on(t.ownerId)]

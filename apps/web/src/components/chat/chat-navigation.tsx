@@ -3,14 +3,38 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@kqa/ui/components/button";
-import { ChevronDown, FileText, MessageSquare, Plus, Settings } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@kqa/ui/components/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@kqa/ui/components/dropdown-menu";
+import { useSidebar } from "@kqa/ui/components/sidebar";
+import { TooltipHint } from "@kqa/ui/components/tooltip";
+import { Skeleton } from "@kqa/ui/components/skeleton";
+import { Input } from "@kqa/ui/components/input";
+import { cn } from "@kqa/ui/lib/utils";
+import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2, Search, X } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
 
 interface Conversation {
   id: string;
   title: string;
+  pinned: boolean;
 }
 
 interface ConversationPage {
@@ -23,16 +47,62 @@ const NAV = [
   { href: "/settings", label: "模型设置", icon: Settings },
 ];
 
-async function getConversations({ pageParam }: { pageParam: string | null }) {
+async function getConversations({ pageParam, search }: { pageParam: string | null; search: string }) {
   const params = new URLSearchParams({ limit: "20" });
   if (pageParam) params.set("cursor", pageParam);
+  if (search.trim()) params.set("q", search.trim());
   const response = await fetch(`/api/conversations?${params}`);
   if (!response.ok) throw new Error("加载对话列表失败");
   return (await response.json()) as ConversationPage;
 }
 
-function ConversationList() {
-  const { activeConversationId, setActiveConversation } = useChatStore();
+interface ConversationListProps {
+  onSelect: (conversationId: string) => void;
+  variant?: "inline" | "popover";
+}
+
+function ConversationList({ onSelect, variant = "inline" }: ConversationListProps) {
+  const { activeConversationId, streaming } = useChatStore();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
+
+  async function updateConversation(conversation: Conversation, action: "pin" | "rename" | "delete") {
+    if (busy || streaming) return;
+    let title: string | null = null;
+    if (action === "rename") {
+      title = window.prompt("重命名对话（最多 200 个字符）", conversation.title);
+      if (title === null) return;
+      title = title.trim();
+      if (!title || title.length > 200) { window.alert("标题须为 1–200 个字符"); return; }
+    }
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/conversations/${conversation.id}`, {
+        method: action === "delete" ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        ...(action !== "delete" ? { body: JSON.stringify(action === "pin" ? { pinned: !conversation.pinned } : { title }) } : {}),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || "操作失败");
+      if (action === "delete") {
+        queryClient.removeQueries({ queryKey: ["messages", conversation.id] });
+        if (activeConversationId === conversation.id) {
+          useChatStore.getState().setActiveConversation(null);
+          router.push("/chat");
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    } catch (error) { window.alert(error instanceof Error ? error.message : "操作失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmDelete() {
+    if (!conversationToDelete) return;
+    await updateConversation(conversationToDelete, "delete");
+    setConversationToDelete(null);
+  }
   const {
     data,
     fetchNextPage,
@@ -40,16 +110,22 @@ function ConversationList() {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["conversations"],
-    queryFn: getConversations,
+    queryKey: ["conversations", search],
+    queryFn: ({ pageParam }) => getConversations({ pageParam, search }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
   const conversations = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
+    <>
     <div
-      className="mt-1 max-h-72 space-y-1 overflow-y-auto px-1 pb-1 pr-0.5"
+      className={cn(
+        "flex flex-col gap-1 overflow-y-auto",
+        variant === "inline"
+          ? "ml-4 mt-2 max-h-72 pb-1 pl-2 pr-0.5"
+          : "max-h-96 px-1 pb-1"
+      )}
       onScroll={(event) => {
         const element = event.currentTarget;
         if (
@@ -61,25 +137,129 @@ function ConversationList() {
         }
       }}
     >
-      {isLoading && <p className="px-2 py-1 text-xs text-muted-foreground">加载对话…</p>}
+      <div className="relative px-1 pb-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/50" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="搜索对话"
+          className="h-8 border-0 bg-sidebar-accent/50 pl-7 pr-7 text-xs shadow-none placeholder:text-sidebar-foreground/50"
+          aria-label="搜索对话"
+        />
+        {search && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-sidebar-foreground/60" onClick={() => setSearch("")} aria-label="清除搜索"><X className="size-3.5" /></button>}
+      </div>
+      {isLoading && <ConversationListSkeleton />}
       {!isLoading && conversations.length === 0 && (
-        <p className="px-2 py-1 text-xs text-muted-foreground">还没有对话</p>
+        <p className="px-2 py-1 text-xs text-sidebar-foreground/60">{search ? "没有匹配的对话" : "还没有对话"}</p>
       )}
       {conversations.map((conversation) => (
-        <button
-          key={conversation.id}
-          type="button"
-          onClick={() => setActiveConversation(conversation.id)}
-          className={`w-full truncate rounded-lg px-2.5 py-2 text-left text-xs transition-all duration-200 ${
-            conversation.id === activeConversationId
-              ? "bg-white/80 font-medium text-primary shadow-[0_4px_14px_-10px_rgba(16,95,70,0.7)] ring-1 ring-emerald-700/10"
-              : "text-muted-foreground hover:bg-white/65 hover:text-accent-foreground"
-          }`}
-        >
-          {conversation.title}
-        </button>
+        <div key={conversation.id} className={cn(
+          "group flex items-center rounded-lg transition-colors hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+          conversation.id === activeConversationId && "bg-sidebar-accent text-sidebar-accent-foreground"
+        )}>
+          <button type="button" disabled={streaming} onClick={() => onSelect(conversation.id)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-2 text-left text-xs text-sidebar-foreground disabled:opacity-50"
+            aria-current={conversation.id === activeConversationId ? "page" : undefined}>
+            {conversation.pinned && <Pin className="size-3 shrink-0" aria-label="已固定" />}
+            <span className="truncate">{conversation.title}</span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" disabled={busy || streaming}
+                className="mr-1 size-6 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
+                aria-label={`对话操作：${conversation.title}`}><MoreVertical /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right" className="border-0">
+              <DropdownMenuGroup>
+                <DropdownMenuItem onSelect={() => void updateConversation(conversation, "pin")}>
+                  {conversation.pinned ? <PinOff /> : <Pin />}{conversation.pinned ? "取消固定" : "固定"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void updateConversation(conversation, "rename")}><Pencil />重命名</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConversationToDelete(conversation)}><Trash2 />删除</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       ))}
-      {isFetchingNextPage && <p className="px-2 py-1 text-xs text-muted-foreground">加载更多…</p>}
+      {isFetchingNextPage && <ConversationListSkeleton />}
+    </div>
+    <AlertDialog
+      open={Boolean(conversationToDelete)}
+      onOpenChange={(open) => {
+        if (!open && !busy) setConversationToDelete(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>删除对话？</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除“{conversationToDelete?.title}”及其中全部消息后将无法恢复。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction
+            disabled={busy || streaming}
+            onClick={(event) => {
+              event.preventDefault();
+              void confirmDelete();
+            }}
+          >
+            {busy ? "删除中…" : "删除"}
+          </AlertDialogAction>
+          <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
+  );
+}
+
+function ConversationPopover({
+  onSelect,
+  active,
+}: {
+  onSelect: (conversationId: string) => void;
+  active: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <TooltipHint content="问答" side="right">
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "size-10 rounded-xl text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              active && "bg-sidebar-accent text-sidebar-accent-foreground"
+            )}
+            aria-label="查看问答记录"
+          >
+            <MessageSquare data-icon="inline-start" />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipHint>
+      <DropdownMenuContent
+        side="right"
+        align="start"
+        sideOffset={14}
+        className="w-80 border-0 bg-sidebar p-2 text-sidebar-foreground shadow-xl"
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="px-2 py-2 text-sidebar-foreground/60">问答记录</DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <ConversationList onSelect={onSelect} variant="popover" />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ConversationListSkeleton() {
+  return (
+    <div className="flex flex-col gap-2 px-2 py-1.5" aria-label="正在加载对话" role="status">
+      <Skeleton className="h-3 w-4/5" />
+      <Skeleton className="h-3 w-3/5" />
+      <Skeleton className="h-3 w-2/3" />
     </div>
   );
 }
@@ -88,6 +268,7 @@ function ConversationList() {
 export function ChatNavigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const { collapsed, isMobile, setMobileOpen } = useSidebar();
   const { setActiveConversation } = useChatStore();
   const [expanded, setExpanded] = useState(pathname === "/chat");
   const isChat = pathname === "/chat";
@@ -97,68 +278,96 @@ export function ChatNavigation() {
   }, [isChat]);
 
   function startNewConversation() {
+    if (useChatStore.getState().streaming) return;
     setActiveConversation(null);
     setExpanded(true);
+    if (isMobile) setMobileOpen(false);
     router.push("/chat");
   }
 
+  function selectConversation(conversationId: string) {
+    if (useChatStore.getState().streaming) return;
+    setActiveConversation(conversationId);
+    // 会话选择不应折叠所属的「问答」分组；从其他页面进入时也回到聊天页。
+    setExpanded(true);
+    if (isMobile) setMobileOpen(false);
+    router.push(`/chat?id=${encodeURIComponent(conversationId)}`);
+  }
+
   return (
-    <nav className="flex-1 space-y-1.5">
+    <nav className="flex flex-col gap-1.5">
       <div>
-        <div
-          className={`flex items-center rounded-xl border transition-all duration-200 ${
-            isChat
-              ? "border-emerald-700/10 bg-emerald-500/10 shadow-[0_8px_20px_-16px_rgba(10,108,75,0.75)]"
-              : "border-transparent hover:bg-white/50"
-          }`}
-        >
-          <Link
-            href="/chat"
-            onClick={() => setExpanded(true)}
-            className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors ${
-              isChat ? "font-medium text-emerald-950" : "text-muted-foreground hover:text-accent-foreground"
+        {collapsed ? (
+          <ConversationPopover onSelect={selectConversation} active={isChat} />
+        ) : (
+          <div
+            className={`flex items-center rounded-xl transition-colors duration-200 ${
+              isChat
+                ? "bg-sidebar-accent"
+                : "hover:bg-sidebar-accent"
             }`}
           >
-            <MessageSquare className="size-4" />
-            问答
-          </Link>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="mr-0.5 size-7 rounded-lg text-primary hover:bg-emerald-500/15 hover:text-primary"
-            onClick={startNewConversation}
-            title="新建对话"
-            aria-label="新建对话"
-          >
-            <Plus className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="mr-0.5 size-7 rounded-lg text-muted-foreground hover:bg-emerald-500/10"
-            onClick={() => setExpanded((value) => !value)}
-            title={expanded ? "收起对话列表" : "展开对话列表"}
-            aria-label={expanded ? "收起对话列表" : "展开对话列表"}
-          >
-            <ChevronDown className={`size-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
-          </Button>
-        </div>
-        {isChat && expanded && <ConversationList />}
+            <Link
+              href="/chat"
+              onClick={() => {
+                setExpanded(true);
+                if (isMobile) setMobileOpen(false);
+              }}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors ${
+                isChat
+                  ? "font-medium text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/60 hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <MessageSquare className="size-4" />
+              问答
+            </Link>
+            <TooltipHint content="新建对话">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mr-0.5 size-7 rounded-lg text-sidebar-primary hover:bg-sidebar-accent hover:text-sidebar-primary"
+                onClick={startNewConversation}
+                aria-label="新建对话"
+              >
+                <Plus data-icon="inline-start" />
+              </Button>
+            </TooltipHint>
+            <TooltipHint content={expanded ? "收起对话列表" : "展开对话列表"}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mr-0.5 size-7 rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent"
+                onClick={() => setExpanded((value) => !value)}
+                aria-label={expanded ? "收起对话列表" : "展开对话列表"}
+              >
+                <ChevronDown className={`transition-transform ${expanded ? "" : "-rotate-90"}`} />
+              </Button>
+            </TooltipHint>
+          </div>
+        )}
+        {!collapsed && expanded && <ConversationList onSelect={selectConversation} />}
       </div>
       {NAV.map((item) => {
-        const linkClassName = `flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-transparent px-2.5 py-2 text-sm transition-all duration-200 ${
+        const linkClassName = `flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors duration-200 ${
+          collapsed ? "justify-center px-2" : ""
+        } ${
           pathname === item.href
-            ? "border-emerald-700/10 bg-white/75 font-medium text-emerald-950 shadow-[0_5px_16px_-14px_rgba(16,95,70,0.75)]"
-            : "text-muted-foreground hover:bg-white/55 hover:text-accent-foreground"
+            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         }`;
 
         return (
-          <Link key={item.href} href={item.href} className={linkClassName}>
-            <item.icon className="size-4" />
-            {item.label}
-          </Link>
+          <TooltipHint key={item.href} content={item.label} side="right" hidden={!collapsed}>
+            <Link href={item.href} className={linkClassName} aria-label={item.label} onClick={() => {
+              if (isMobile) setMobileOpen(false);
+            }}>
+              <item.icon className="size-4" />
+              {!collapsed && item.label}
+            </Link>
+          </TooltipHint>
         );
       })}
     </nav>
