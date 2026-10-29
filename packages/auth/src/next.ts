@@ -6,11 +6,14 @@ export async function getSessionUser(): Promise<SessionPayload | null> {
   // 获取当前请求的 Cookie 存储对象
   const store = await cookies();
 
-  // 调用存储对象的 .get() 方法，尝试获取名为 SESSION_COOKIE 的特定 Cookie
-  const token = store.get(SESSION_COOKIE)?.value;
-
-  if (!token) return null;
-
-  // 如果取到了 token，则调用 verifySession 函数进行验证，最终返回验证后的用户会话信息或 null
-  return verifySession(token);
+  // 浏览器对同名 Cookie(不同 Domain/Path)会全部带上。逐个验签:
+  // 恰 1 个通过 → 正常会话;0 个 → 未登录;≥2 个 → 疑似 Cookie Tossing/会话固定,拒绝。
+  const entries = store.getAll(SESSION_COOKIE);
+  const valid: SessionPayload[] = [];
+  for (const entry of entries) {
+    const payload = await verifySession(entry.value);
+    if (payload) valid.push(payload);
+  }
+  if (valid.length !== 1) return null;
+  return valid[0];
 }

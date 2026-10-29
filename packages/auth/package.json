@@ -14,11 +14,15 @@
     "jose": "^6.0.10"
   },
   "peerDependencies": {
-    "next": "^15.0.0"
+    "next": "^15.0.0 || ^16.0.0"
   },
   "devDependencies": {
     "@kqa/tsconfig": "workspace:*",
-    "next": "^15.3.2",
-    "typescript": "^5.8.0"
+    "next": "^16.4.3",
+    "typescript": "^5.8.0",
+    "vitest": "^5.0.5"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }

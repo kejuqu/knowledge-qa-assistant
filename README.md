@@ -50,6 +50,9 @@ app.lvh.me:3100 ──middleware 检查 cookie 存在──> 服务端用同一 
 - cookie 写在**父域名** `.lvh.me` 上，所有子域名共享
 - `lvh.me` 是通配 DNS，永远解析到 127.0.0.1，无需改 hosts；生产换成 `.your-domain.com`
 - JWT 由 `jose` 用 HS256 签名，密钥 `AUTH_SECRET` 两个 app 共享，auth 与 web 零互调
+- JWT 带标准 claim：`iss=kqa-auth` / `aud=kqa`，验签时一并核对，防止其它系统用同密钥签发的 token 被混用
+- `COOKIE_DOMAIN` 有**代码级白名单**（`.lvh.me` / `localhost`），不在白名单内的值直接抛异常，防止配置注入把会话 cookie 写到攻击者域名
+- 校验时强制要求 `tenantId` 存在，老版本 token 自动失效、强制重新登录
 
 ## 快速开始
 
@@ -104,7 +107,7 @@ pnpm dev
                                     │
                         SSE（Redis pub/sub）实时推送状态到前端
 
-提问 ──> Milvus 按 tenantId 过滤检索 top-4 ──> 拼装 prompt ──> LLM 流式回答 + 引用来源 ──> 落库 messages
+提问 ──> Milvus 按 tenantId + 选中文档范围过滤检索 top-4 ──> 拼装 prompt ──> LLM 流式回答 + 引用来源 ──> 落库 messages
 ```
 
 ---
@@ -122,7 +125,7 @@ pnpm dev
 | 上传进度条 | ✅ | XMLHttpRequest `upload.onprogress`，0-90% 上传、90-100% 服务端处理 |
 | 切块参数可配置 | 🔲 | 当前固定 800/120 字符，需支持管理员按知识库配置 chunkSize / overlap |
 | 软删除 | ✅ | `deleted_at` 字段，列表查询自动过滤，同步物理删 Milvus 向量 |
-| 失败重试 | 🔲 | 当前需手动重新上传，需加"重试"按钮复用队列 |
+| 失败重试 | ✅ | 「重试」按钮调 `POST /api/documents/:id/retry`：先清理上次残留向量，再利用上传时保存的 `source_text` 重新排队，无需重新上传文件 |
 | 元数据 JSONB（部门/密级/版本） | 🔲 | 需扩展 `documents` 表加 `metadata jsonb` 字段 |
 | 审核发布流转 | 🔲 | 状态机：draft → pending_review → published → archived，仅 published 进检索 |
 | 文档模糊搜索 | 🔲 | PG `ILIKE` 或全文检索实现 |
@@ -136,6 +139,7 @@ pnpm dev
 | 向量检索（语义召回） | ✅ | Milvus `similaritySearch`，按 `tenantId` 过滤，top-4 |
 | 流式生成（SSE） | ✅ | `/api/chat` 返回 ReadableStream，逐 token 推送给前端 |
 | 引用来源展示 | ✅ | 回答附 `{ documentId, filename, chunkIndex }`，前端展示引用卡片 |
+| 按文档范围检索 | ✅ | 提问时可勾选文档子集，Milvus 过滤条件追加 `documentId in [...]`（空数组则命中"无许可文档"，等于拒答） |
 | 混合检索（BM25 + 向量） | 🔲 | 向量路走 Milvus；关键词路用 PG `tsvector` 全文检索，RRF 融合排序 |
 | Rerank 精排 | 🔲 | 融合后接 BGE Rerank（CPU 可跑），进一步压缩上下文 |
 | 拒答机制 | 🔲 | 相似度低于阈值时明确拒答，而不是让 LLM 编造 |
@@ -148,8 +152,10 @@ pnpm dev
 | --- | --- | --- |
 | 流式输出 | ✅ | SSE 逐字返回，降低感知延迟 |
 | 多会话管理 | ✅ | 会话列表、切换、历史消息加载 |
-| 会话重命名 | 🔲 | 当前标题取问题前 20 字，需支持手动改名 |
-| 会话删除 | 🔲 | 需加删除按钮，清理对应 messages |
+| 会话重命名 | ✅ | `PATCH /api/conversations/:id`，手动改名（1–200 字符） |
+| 会话置顶 | ✅ | `PATCH /api/conversations/:id` 切换 `pinned`，列表置顶优先排序 |
+| 会话删除 | ✅ | `DELETE /api/conversations/:id`，级联清理 messages |
+| 会话搜索 | ✅ | 侧栏搜索框，标题 ILIKE 模糊匹配（转义 `%`/`_`） |
 | 会话 24 小时过期 | 🔲 | 需加定时任务清理过期会话 |
 | 检索可视化 | 🔲 | 同"二、检索过程可视化" |
 
@@ -220,6 +226,10 @@ docker exec -it kqa-redis redis-cli
 ### 文档处理失败怎么排查
 
 文档状态流转：`pending → processing → ready / failed`。失败原因存在 `documents.error` 字段。
+
+**第零步：优先点「重试」按钮**
+
+失败文档支持一键重新入库（`POST /api/documents/:id/retry`），服务端会自动清理上次残留的向量、用上传时保存的原文重新排队。仅当提示"未保存解析文本"的历史文档才需要删除后重新上传。
 
 **第一步：看数据库里的错误信息**
 
