@@ -13,6 +13,7 @@ import {
   InputGroupTextarea,
 } from "@kqa/ui/components/input-group";
 import { ArrowDown, ArrowUp, Bot, FileText, Plus, Sparkles, User as UserIcon } from "lucide-react";
+import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { KnowledgeBaseSelector, type KnowledgeBaseDocument } from "@/components/chat/knowledge-base-selector";
 import { ACCEPT_STRING, useDocumentUpload } from "@/components/documents/use-document-upload";
@@ -398,13 +399,13 @@ function MessageBubble({ message }: { message: Message }) {
         {isUser ? <UserIcon className="size-4" /> : <Bot className="size-4" />}
       </div>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+        className={`min-w-0 max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
           isUser
             ? "rounded-tr-md bg-primary text-primary-foreground"
             : "rounded-tl-md bg-card text-foreground"
         }`}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {isUser ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : <MessageMarkdown content={message.content} />}
         {message.citations && message.citations.length > 0 && (
           <div className="mt-2 pt-2 text-xs opacity-80">
             <p className="mb-1 font-medium">引用来源：</p>
