@@ -74,6 +74,12 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
             <DropdownMenuItem
               asChild
               className="text-destructive focus:bg-destructive focus:text-white"
+              onSelect={(e) => {
+                // Radix 会在 click 里同步关闭菜单并卸载表单，导致浏览器来不及执行 submit 的默认行为。
+                // 阻止默认关闭后手动提交表单。
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).closest("form")?.requestSubmit();
+              }}
             >
               <button type="submit" className="w-full">
                 <LogOut data-icon="inline-start" />

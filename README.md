@@ -72,7 +72,7 @@ pnpm dev
 
 访问：
 
-- 主应用：http://app.lvh.me:3100 （未登录自动跳转认证中心）
+- 主应用：http://app.lvh.me:3100 （如果未登录自动跳转认证中心）
 - 认证中心：http://auth.lvh.me:3001
 - MinIO 控制台：http://localhost:9001 （minioadmin / minioadmin）
 
@@ -280,7 +280,7 @@ EMBEDDING_MODEL=BAAI/bge-m3      # 中文 embedding 效果好
 
 其他可选：
 - **DeepSeek**：`https://api.deepseek.com/v1`（LLM 好，但无 embedding，需另配）
-- **本地 Ollama**：`http://localhost:11434/v1`（完全离线，先 `ollama pull bge-m3`）
+- **本地 Ollama**：`http://localhost:11434/v1`（完全离线，先 `ollama pull bge-m3` 或者 下载 deepseek-r1:7b）
 - **OpenAI + 代理**：配置 `HTTPS_PROXY` 环境变量
 
 ### 清理测试数据

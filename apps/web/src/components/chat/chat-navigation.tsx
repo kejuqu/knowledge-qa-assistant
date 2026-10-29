@@ -364,7 +364,12 @@ export function ChatNavigation() {
             <Link href={item.href} className={linkClassName} aria-label={item.label} onClick={() => {
               if (isMobile) setMobileOpen(false);
             }}>
-              <item.icon className="size-4" />
+              <item.icon
+                className={cn(
+                  "size-4",
+                  pathname === item.href && "text-sidebar-primary"
+                )}
+              />
               {!collapsed && item.label}
             </Link>
           </TooltipHint>

@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "该账号不属于任何租户" }, { status: 403 });
   }
 
+  // 把 用户信息 + 当前租户/角色 签成一个 HS256 的 JWT
   const token = await signSession({
     sub: user.id,
     email: user.email,
@@ -46,13 +47,15 @@ export async function POST(request: Request) {
   });
 
   const response = NextResponse.json({ ok: true });
+
+  // response.cookies.set() 这个便捷 API，能在响应上挂 Set-Cookie 头，必须运行在 Route Handler
   response.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    domain: getCookieDomain(),
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
+    httpOnly: true, // document.cookie 读不到这个 Cookie。防 XSS 偷 token 的关键。前端拿不到 token，也就无法把它放进 Authorization 头——所以这套是纯 Cookie 会话方案。
+    sameSite: "lax", // lax：跨站请求默认不带 Cookie，但顶级导航（点链接、GET 跳转）会带。能挡住大部分 CSRF，同时不影响用户从外部链接点进来还能保持登录。
+    secure: process.env.NODE_ENV === "production", // 生产环境强制 HTTPS，防止 token 在明文 HTTP 上被窃听。本地开发用 http://localhost 时关掉，否则 Cookie 不会生效。
+    domain: getCookieDomain(), // 决定哪些子域能收到这个 Cookie
+    path: "/", // 所有路径的请求都会带上。如果只想让 /api 或 /app 带，可以收窄，减少暴露面
+    maxAge: SESSION_MAX_AGE, // Cookie 在浏览器端的存活时间。到期浏览器自动删除。maxAge 必须和 JWT 的 exp 一致
   });
   return response;
 }
