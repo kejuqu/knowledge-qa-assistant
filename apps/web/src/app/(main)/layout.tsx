@@ -31,8 +31,10 @@ export default async function MainLayout({ children }: { children: React.ReactNo
               <BookOpenCheck className="size-4" />
             </div>
             <span data-sidebar-label className="min-w-0 flex-1 truncate font-semibold tracking-tight">知识问答助手</span>
-            <ConversationSearch />
-            <SidebarMobileClose />
+            <div className="flex shrink-0 items-center gap-0">
+              <ConversationSearch />
+              <SidebarMobileClose />
+            </div>
           </div>
           <p data-sidebar-label className="truncate px-1.5 text-xs text-sidebar-foreground/60">{user.tenantName}</p>
         </SidebarHeader>
