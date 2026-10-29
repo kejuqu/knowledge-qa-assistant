@@ -26,9 +26,8 @@ import {
 import { useSidebar } from "@kqa/ui/components/sidebar";
 import { TooltipHint } from "@kqa/ui/components/tooltip";
 import { Skeleton } from "@kqa/ui/components/skeleton";
-import { Input } from "@kqa/ui/components/input";
 import { cn } from "@kqa/ui/lib/utils";
-import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2, Search, X } from "lucide-react";
+import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2 } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
 
 interface Conversation {
@@ -66,7 +65,6 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
   const router = useRouter();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
 
   async function updateConversation(conversation: Conversation, action: "pin" | "rename" | "delete") {
@@ -110,8 +108,8 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["conversations", search],
-    queryFn: ({ pageParam }) => getConversations({ pageParam, search }),
+    queryKey: ["conversations", ""],
+    queryFn: ({ pageParam }) => getConversations({ pageParam, search: "" }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
@@ -137,20 +135,9 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
         }
       }}
     >
-      <div className="relative px-1 pb-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/50" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="搜索对话"
-          className="h-8 border-0 bg-sidebar-accent/50 pl-7 pr-7 text-xs shadow-none placeholder:text-sidebar-foreground/50"
-          aria-label="搜索对话"
-        />
-        {search && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-sidebar-foreground/60" onClick={() => setSearch("")} aria-label="清除搜索"><X className="size-3.5" /></button>}
-      </div>
       {isLoading && <ConversationListSkeleton />}
       {!isLoading && conversations.length === 0 && (
-        <p className="px-2 py-1 text-xs text-sidebar-foreground/60">{search ? "没有匹配的对话" : "还没有对话"}</p>
+        <p className="px-2 py-1 text-xs text-sidebar-foreground/60">还没有对话</p>
       )}
       {conversations.map((conversation) => (
         <div key={conversation.id} className={cn(

@@ -70,7 +70,7 @@ function ThemeToggleButton() {
 }
 
 /** Shared by the theme submenu and the compact theme menu. */
-export function ThemeOptions() {
+export function ThemeOptions({ compact = false }: { compact?: boolean }) {
   const [theme, setTheme] = useState<Theme>("system");
 
   useEffect(() => {
@@ -80,6 +80,7 @@ export function ThemeOptions() {
 
   return (
     <DropdownMenuRadioGroup
+      className={cn(compact && "grid grid-cols-3 gap-1")}
       value={theme}
       onValueChange={(value) => {
         const nextTheme = OPTIONS.find((option) => option.value === value)?.value;
@@ -92,10 +93,11 @@ export function ThemeOptions() {
         <DropdownMenuRadioItem
           key={option.value}
           value={option.value}
-          className="rounded-lg px-3 py-2.5"
+          className={cn("rounded-lg px-3 py-2.5", compact && "min-h-14 flex-col justify-center gap-1 px-2 data-[state=checked]:bg-accent")}
         >
-          <span className="flex-1">{option.label}</span>
-          <Check className={cn(theme !== option.value && "invisible")} aria-hidden="true" />
+          {compact && <option.icon aria-hidden="true" />}
+          <span className={cn(!compact && "flex-1")}>{option.label}</span>
+          {!compact && <Check className={cn(theme !== option.value && "invisible")} aria-hidden="true" />}
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>

@@ -8,9 +8,11 @@ import {
   SidebarHeader,
   SidebarMobileOverlay,
   SidebarMobileTrigger,
+  SidebarMobileClose,
   SidebarProvider,
   SidebarRail,
 } from "@kqa/ui/components/sidebar";
+import { ConversationSearch } from "@/components/chat/conversation-search";
 import { ChatNavigation } from "@/components/chat/chat-navigation";
 import { UserMenu } from "@/components/user-menu";
 
@@ -24,11 +26,13 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     <SidebarProvider className="app-shell">
       <Sidebar className="p-3.5">
         <SidebarHeader className="mb-6">
-          <div className="mb-1 flex items-center gap-2.5 px-1.5">
-            <div className="flex size-8 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+          <div className="mb-1 flex items-center gap-2.5">
+            <div data-sidebar-label className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
               <BookOpenCheck className="size-4" />
             </div>
-            <span data-sidebar-label className="truncate font-semibold tracking-tight">知识问答助手</span>
+            <span data-sidebar-label className="min-w-0 flex-1 truncate font-semibold tracking-tight">知识问答助手</span>
+            <ConversationSearch />
+            <SidebarMobileClose />
           </div>
           <p data-sidebar-label className="truncate px-1.5 text-xs text-sidebar-foreground/60">{user.tenantName}</p>
         </SidebarHeader>

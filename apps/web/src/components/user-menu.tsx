@@ -8,6 +8,8 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -55,8 +57,12 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
           </Button>
         </DropdownMenuTrigger>
       </TooltipHint>
-      <DropdownMenuContent align="start" className="w-72 border-0 shadow-lg">
-        <DropdownMenuGroup>
+      <DropdownMenuContent side="top" align="start" sideOffset={8} collisionPadding={12} className="w-72 max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-2xl border-0 p-2 shadow-lg">
+        <DropdownMenuGroup className="md:hidden">
+          <DropdownMenuLabel className="flex items-center gap-2 px-2 pb-2"><Palette className="size-4" />主题</DropdownMenuLabel>
+          <ThemeOptions compact />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup className="hidden md:block">
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="rounded-lg px-3 py-2.5">
               <Palette />
@@ -69,11 +75,12 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <form action={signOutUrl} method="post">
             <DropdownMenuItem
               asChild
-              className="text-destructive focus:bg-destructive focus:text-white"
+              className="min-h-11 rounded-lg px-3 text-destructive focus:bg-destructive focus:text-white"
               onSelect={(e) => {
                 // Radix 会在 click 里同步关闭菜单并卸载表单，导致浏览器来不及执行 submit 的默认行为。
                 // 阻止默认关闭后手动提交表单。

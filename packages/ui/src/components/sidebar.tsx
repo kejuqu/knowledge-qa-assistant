@@ -4,9 +4,10 @@ import * as React from "react";
 import { ChevronsLeft, ChevronsRight, Menu, X } from "lucide-react";
 import { TooltipHint, TooltipProvider } from "./tooltip";
 import { cn } from "../lib/utils";
+import { Button } from "./button";
 
-const DEFAULT_WIDTH = 236;
-const MIN_WIDTH = 208;
+const DEFAULT_WIDTH = 300;
+const MIN_WIDTH = 280;
 const MAX_WIDTH = 440;
 const COLLAPSED_WIDTH = 68;
 
@@ -40,7 +41,7 @@ function SidebarProvider({
   React.useEffect(() => {
     const savedWidth = window.localStorage.getItem("kqa-sidebar-width");
     const parsedWidth = Number(savedWidth);
-    if (Number.isFinite(parsedWidth)) setWidthState(clampWidth(parsedWidth));
+    if (savedWidth !== null && Number.isFinite(parsedWidth)) setWidthState(clampWidth(parsedWidth));
   }, []);
 
   React.useEffect(() => {
@@ -249,29 +250,34 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"div">) {
 
 function SidebarMobileTrigger() {
   const { isMobile, mobileOpen, setMobileOpen } = useSidebar();
-  if (!isMobile) return null;
+  if (!isMobile || mobileOpen) return null;
 
   return (
     <button
       type="button"
-      className={cn(
-        "fixed top-3 z-[60] flex size-10 items-center justify-center rounded-xl text-sidebar-foreground transition-[left,background-color,box-shadow]",
-        mobileOpen
-          ? "left-[calc(min(18rem,82vw)-3.25rem)] bg-transparent shadow-none hover:bg-sidebar-accent"
-          : "left-3 bg-sidebar shadow-md",
-      )}
-      onClick={() => setMobileOpen(!mobileOpen)}
-      aria-label={mobileOpen ? "关闭导航" : "打开导航"}
+      className="fixed left-3 top-3 z-[60] flex size-10 items-center justify-center rounded-xl bg-sidebar text-sidebar-foreground shadow-md"
+      onClick={() => setMobileOpen(true)}
+      aria-label="打开导航"
     >
-      {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+      <Menu className="size-5" />
     </button>
+  );
+}
+
+function SidebarMobileClose() {
+  const { isMobile, setMobileOpen } = useSidebar();
+  if (!isMobile) return null;
+  return (
+    <Button variant="ghost" size="icon" className="size-10 shrink-0 rounded-xl" onClick={() => setMobileOpen(false)} aria-label="关闭导航">
+      <X data-icon="inline-start" />
+    </Button>
   );
 }
 
 function SidebarMobileOverlay() {
   const { isMobile, mobileOpen, setMobileOpen } = useSidebar();
   if (!isMobile || !mobileOpen) return null;
-  return <button type="button" className="fixed inset-0 z-40 bg-foreground/30" onClick={() => setMobileOpen(false)} aria-label="关闭导航" />;
+  return <button type="button" className="fixed inset-0 z-40 bg-foreground/30" onClick={() => setMobileOpen(false)} aria-label="关闭导航遮罩" />;
 }
 
 export {
@@ -284,6 +290,7 @@ export {
   SidebarMenuItem,
   SidebarMobileOverlay,
   SidebarMobileTrigger,
+  SidebarMobileClose,
   SidebarProvider,
   SidebarRail,
   useSidebar,
