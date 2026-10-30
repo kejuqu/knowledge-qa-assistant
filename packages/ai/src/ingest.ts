@@ -3,6 +3,7 @@ import { Document } from "@langchain/core/documents";
 import type { ModelConfig } from "./models";
 import { createEmbeddings } from "./models";
 import { getVectorStore } from "./vector-store";
+import { validateVectors } from "./validate-vectors";
 
 const splitter = new RecursiveCharacterTextSplitter({
   chunkSize: 800,
@@ -35,7 +36,19 @@ export async function ingestDocument(input: IngestInput, config: ModelConfig): P
       })
   );
 
-  const store = await getVectorStore(createEmbeddings(config));
-  await store.addDocuments(docs);
+  const embeddings = createEmbeddings(config);
+  const vectors = await embeddings.embedDocuments(chunks);
+  validateVectors(vectors, docs.length);
+
+  const store = await getVectorStore(embeddings);
+  await store.ensureCollection(vectors, docs);
+  const collection = await store.client.describeCollection({ collection_name: store.collectionName });
+  const field = collection.schema.fields.find((field) => field.name === store.vectorField);
+  const dimension = Number(field?.type_params.find((param) => param.key === "dim")?.value);
+  if (!Number.isInteger(dimension) || dimension <= 0) {
+    throw new Error("无法读取知识库向量维度，请检查 Milvus 集合结构。");
+  }
+  validateVectors(vectors, docs.length, dimension);
+  await store.addVectors(vectors, docs);
   return docs.length;
 }

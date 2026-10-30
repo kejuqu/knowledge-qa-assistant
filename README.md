@@ -96,6 +96,30 @@ pnpm dev
 
 配置存 PostgreSQL `model_settings` 表，原样传给 LangChain 的 `ChatOpenAI` / `OpenAIEmbeddings` 初始化，保存即生效。
 
+### ⚠️ Embedding 模型必须是对话模型以外的专用向量化模型
+
+**LLM（如 deepseek-r1、qwen3）不能当 Embedding 模型用**。Ollama 的 `/v1/embeddings` 接口对任何模型都会"强行"返回向量（取 hidden state），表面上接口不报错、向量也写得进 Milvus——但这些向量没有语义检索能力，问"年假怎么休"会召回完全无关的片段，且很难排查。
+
+```bash
+# 正确的搭配：LLM 和 Embedding 各拉各的
+ollama pull deepseek-r1:7b   # 对话生成
+ollama pull bge-m3           # 文本向量化（1024 维，中文语义检索强）
+```
+
+```bash
+# .env —— 两个配置是独立的，不要填同一个模型
+LLM_MODEL=deepseek-r1:7b
+EMBEDDING_MODEL=bge-m3
+```
+
+**换 Embedding 模型 = 向量维度变化 = 旧向量全部作废**（bge-m3 是 1024 维，text-embedding-3-small 是 1536 维）。切换后需要：
+
+1. Attu（http://localhost:8000）→ Collections → 删除 `kqa_chunks` 集合
+2. 对已有文档重新入库（原文存在 PG 的 `source_text`，「重试」按钮即可，无需重新上传文件）
+3. **重启 `pnpm dev`**——运行中的进程缓存了启动时的环境变量，不重启的话新配置不生效
+
+验证：Attu → Vector Search 输入问题，top-K 应该命中语义相关的 chunk。
+
 ## 数据流
 
 ```

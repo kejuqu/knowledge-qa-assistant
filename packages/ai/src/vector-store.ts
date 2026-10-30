@@ -21,6 +21,13 @@ export async function getVectorStore(embeddings: OpenAIEmbeddings) {
     textField: "text",
     // 显式设置 text 字段最大长度，避免 LangChain 用第一条数据的长度推断 varchar 上限
     textFieldMaxLength: 65535,
+    // 创建和查询必须使用相同的距离度量，匹配已有 kqa_chunks 索引。
+    indexCreateOptions: {
+      index_type: "IVF_FLAT",
+      metric_type: "COSINE",
+      params: { nlist: 1024 },
+      search_params: { nprobe: 10 },
+    },
   });
 }
 
