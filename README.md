@@ -44,12 +44,14 @@ knowledge-qa-assistant/
 ```
 auth.lvh.me:3001 ──登录成功──> Set-Cookie: kqa_session=<JWT>; Domain=.lvh.me; HttpOnly
                                         │
-app.lvh.me:3100 ──middleware 检查 cookie 存在──> 服务端用同一 AUTH_SECRET 校验 JWT
+app.lvh.me:3100 ──proxy.ts 统一校验 JWT──> 服务端独立验证身份与资源权限
 ```
 
 - cookie 写在**父域名** `.lvh.me` 上，所有子域名共享
 - `lvh.me` 是通配 DNS，永远解析到 127.0.0.1，无需改 hosts；生产换成 `.your-domain.com`
 - JWT 由 `jose` 用 HS256 签名，密钥 `AUTH_SECRET` 两个 app 共享，auth 与 web 零互调
+- Web 的 `proxy.ts` 统一验证会话：页面未登录跳转认证中心，API 未登录返回 JSON 401；框架静态资源及公开图标放行
+- 服务端组件、API 路由仍通过 `getSessionUser()` 独立验签，并检查租户、资源归属等业务权限；Proxy 不替代这些校验
 - JWT 带标准 claim：`iss=kqa-auth` / `aud=kqa`，验签时一并核对，防止其它系统用同密钥签发的 token 被混用
 - `COOKIE_DOMAIN` 有**代码级白名单**（`.lvh.me` / `localhost`），不在白名单内的值直接抛异常，防止配置注入把会话 cookie 写到攻击者域名
 - 校验时强制要求 `tenantId` 存在，老版本 token 自动失效、强制重新登录
