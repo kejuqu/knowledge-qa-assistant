@@ -17,6 +17,7 @@ import {
 } from "@kqa/ui/components/alert-dialog";
 import { FileText, Loader2, CheckCircle2, XCircle, Clock, Trash2, RotateCw, Download } from "lucide-react";
 
+import { useTenantRole } from "@/components/tenant-role";
 import { CitationPanel } from "./document-preview";
 
 export interface DocumentItem {
@@ -55,7 +56,8 @@ const STATUS_META: Record<
 
 export function DocumentCard({ doc, onPreview }: { doc: DocumentItem; onPreview?: () => void }) {
   const meta = STATUS_META[doc.status];
-  const canDelete = doc.status === "ready" || doc.status === "failed";
+  const isAdmin = useTenantRole() === "admin";
+  const canDelete = isAdmin && (doc.status === "ready" || doc.status === "failed");
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -83,7 +85,7 @@ export function DocumentCard({ doc, onPreview }: { doc: DocumentItem; onPreview?
   }
 
   async function handleRetry() {
-    if (doc.status !== "failed" || retrying) return;
+    if (!isAdmin || doc.status !== "failed" || retrying) return;
     setRetrying(true);
     const res = await fetch(`/api/documents/${doc.id}/retry`, { method: "POST" });
     const data = await res.json();
@@ -118,7 +120,7 @@ export function DocumentCard({ doc, onPreview }: { doc: DocumentItem; onPreview?
             <span className="text-xs text-muted-foreground">{meta.label}</span>
             {meta.icon}
           </div>
-          {doc.status === "failed" && (
+          {isAdmin && doc.status === "failed" && (
             <Button
               variant="ghost"
               size="sm"

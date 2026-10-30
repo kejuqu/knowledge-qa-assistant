@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq, isNull, and } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
+import { getTenantUser } from "@/lib/tenant-user";
 import { getSessionUser } from "@kqa/auth/next";
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from "@kqa/ai";
 import { enqueueDocument } from "@/lib/queue";
@@ -49,8 +50,11 @@ export async function GET() {
  * 前端通过 SSE（/api/events）接收状态变更，避免同步 embedding 造成的请求超时。
  */
 export async function POST(request: Request) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "仅租户管理员可管理知识库文档" }, { status: 403 });
+  }
 
   const formData = await request.formData();
   const file = formData.get("file");

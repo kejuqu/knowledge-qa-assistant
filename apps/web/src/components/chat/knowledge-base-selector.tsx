@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@kqa/ui/components/dropdown-menu";
 import { InputGroupButton } from "@kqa/ui/components/input-group";
+import { OverflowText } from "@kqa/ui/components/overflow-text";
 
 export interface KnowledgeBaseDocument {
   id: string;
@@ -77,7 +78,7 @@ export function KnowledgeBaseSelector({
                 toggle(document.id);
               }}
             >
-              <span className="flex-1 truncate">{document.filename}</span>
+              <OverflowText text={document.filename} className="flex-1" />
               {selectedIds.includes(document.id) && <Check aria-hidden="true" />}
             </DropdownMenuItem>
           ))}

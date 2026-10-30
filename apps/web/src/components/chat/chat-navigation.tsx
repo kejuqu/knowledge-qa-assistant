@@ -25,6 +25,7 @@ import {
 } from "@kqa/ui/components/dropdown-menu";
 import { useSidebar } from "@kqa/ui/components/sidebar";
 import { TooltipHint } from "@kqa/ui/components/tooltip";
+import { OverflowText } from "@kqa/ui/components/overflow-text";
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import { cn } from "@kqa/ui/lib/utils";
 import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2 } from "lucide-react";
@@ -148,7 +149,7 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
             className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-2 text-left text-xs text-sidebar-foreground disabled:opacity-50"
             aria-current={conversation.id === activeConversationId ? "page" : undefined}>
             {conversation.pinned && <Pin className="size-3 shrink-0" aria-label="已固定" />}
-            <span className="truncate">{conversation.title}</span>
+            <OverflowText text={conversation.title} className="flex-1" side="right" />
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

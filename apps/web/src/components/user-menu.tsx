@@ -16,6 +16,7 @@ import {
   DropdownMenuSubContent,
 } from "@kqa/ui/components/dropdown-menu";
 import { ChevronsLeft, LogOut, Palette } from "lucide-react";
+import { useTenantRole } from "./tenant-role";
 import { ThemeOptions } from "./theme-toggle";
 
 interface UserMenuProps {
@@ -26,6 +27,7 @@ interface UserMenuProps {
 
 export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
   const { collapsed } = useSidebar();
+  const role = useTenantRole();
 
   return (
     <DropdownMenu>
@@ -46,7 +48,7 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
                 <span className="flex items-center gap-1.5 text-sm font-medium">
                   {name}
                   <span className="rounded-md bg-sidebar-accent px-1.5 py-0.5 text-[10px] text-sidebar-foreground/60">
-                    账户
+                    {role === "admin" ? "管理员" : "员工"}
                   </span>
                 </span>
                 <span className="block truncate text-xs font-normal text-sidebar-foreground/60">

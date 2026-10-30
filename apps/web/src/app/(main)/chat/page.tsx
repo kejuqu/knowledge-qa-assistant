@@ -19,6 +19,7 @@ import { CitationPanel, type CitationChunk } from "@/components/documents/docume
 import { formatMessageTime } from "@/lib/utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { KnowledgeBaseSelector, type KnowledgeBaseDocument } from "@/components/chat/knowledge-base-selector";
+import { useTenantRole } from "@/components/tenant-role";
 import { ACCEPT_STRING, useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useSidebar } from "@kqa/ui/components/sidebar";
@@ -68,6 +69,7 @@ export default function ChatPage() {
 }
 
 function ChatContent() {
+  const isAdmin = useTenantRole() === "admin";
   const searchParams = useSearchParams();
   const activeConversationId = searchParams.get("id");
   const { setActiveConversation, streaming, setStreaming } =
@@ -331,7 +333,7 @@ function ChatContent() {
                 void send();
               }}
             >
-              <input
+              {isAdmin && <input
                 ref={fileInputRef}
                 type="file"
                 accept={ACCEPT_STRING}
@@ -341,7 +343,7 @@ function ChatContent() {
                   if (file) void upload(file);
                   event.target.value = "";
                 }}
-              />
+              />}
               <InputGroup className="chat-composer h-36 gap-2 rounded-3xl border-0 p-4">
                 <InputGroupTextarea
                   ref={inputRef}
@@ -358,7 +360,7 @@ function ChatContent() {
                   className="chat-composer-input min-h-0 p-0"
                 />
                 <InputGroupAddon align="block-end" className="gap-3 p-0">
-                  <TooltipHint content="上传知识库">
+                  {isAdmin && <TooltipHint content="上传知识库">
                     <span className="inline-flex shrink-0" tabIndex={uploadTasks.length > 0 ? 0 : undefined}>
                       <InputGroupButton
                         type="button"
@@ -372,7 +374,7 @@ function ChatContent() {
                         <Plus data-icon="inline-start" />
                       </InputGroupButton>
                     </span>
-                  </TooltipHint>
+                  </TooltipHint>}
                   <div className="ml-auto min-w-0">
                     <KnowledgeBaseSelector
                       documents={knowledgeBaseDocuments}
@@ -389,7 +391,7 @@ function ChatContent() {
                       disabled={streaming}
                     />
                   </div>
-                  <TooltipHint content="发送消息 · Enter 发送，Shift+Enter 换行">
+                  <TooltipHint content={streaming ? "正在生成回复，请稍候" : !input.trim() ? "请输入文本" : "发送消息 · Enter 发送，Shift+Enter 换行"}>
                     <span className="inline-flex shrink-0" tabIndex={streaming || !input.trim() ? 0 : undefined}>
                       <InputGroupButton
                         type="submit"

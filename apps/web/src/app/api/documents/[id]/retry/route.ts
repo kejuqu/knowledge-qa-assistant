@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
 import { deleteDocumentVectors } from "@kqa/ai";
-import { getSessionUser } from "@kqa/auth/next";
+import { getTenantUser } from "@/lib/tenant-user";
 import { publish } from "@/lib/events";
 import { enqueueDocument } from "@/lib/queue";
 
@@ -14,8 +14,11 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "仅租户管理员可管理知识库文档" }, { status: 403 });
+  }
 
   const { id } = await params;
   const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);

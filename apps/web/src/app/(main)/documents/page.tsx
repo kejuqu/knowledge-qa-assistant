@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenantRole } from "@/components/tenant-role";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import { UploadButton } from "@/components/documents/upload-button";
@@ -10,6 +11,7 @@ import { useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useDocumentEvents } from "@/components/documents/use-document-events";
 
 export default function DocumentsPage() {
+  const isAdmin = useTenantRole() === "admin";
   const { upload, tasks, error } = useDocumentUpload();
   // SSE：服务端处理状态变更实时推送到 TanStack Query 缓存
   useDocumentEvents();
@@ -29,7 +31,7 @@ export default function DocumentsPage() {
               支持 PDF / Word(docx) / Markdown / TXT / HTML，解析后自动切分并向量化到 Milvus
             </p>
           </div>
-          {docs.length > 0 && <UploadButton onSelect={upload} />}
+          {isAdmin && docs.length > 0 && <UploadButton onSelect={upload} />}
         </div>
 
         {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
@@ -39,7 +41,9 @@ export default function DocumentsPage() {
         {isLoading ? (
           <DocumentListSkeleton />
         ) : docs.length === 0 && tasks.length === 0 ? (
-          <EmptyState onSelect={upload} />
+          isAdmin ? <EmptyState onSelect={upload} /> : (
+            <p className="py-20 text-center text-sm text-muted-foreground">知识库暂无文档，请联系管理员上传。</p>
+          )
         ) : (
           <DocumentList docs={docs} />
         )}

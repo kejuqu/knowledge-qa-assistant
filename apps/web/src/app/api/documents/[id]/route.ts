@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
+import { getTenantUser } from "@/lib/tenant-user";
 import { deleteDocumentVectors } from "@kqa/ai";
 import { publish } from "@/lib/events";
 import { deleteDocumentObject } from "@/lib/object-storage";
@@ -15,8 +15,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "仅租户管理员可管理知识库文档" }, { status: 403 });
+  }
 
   const { id } = await params;
 

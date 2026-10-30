@@ -141,6 +141,38 @@ body {
   color: var(--foreground);
 }
 
+/* 统一操作控件的默认光标，拖拽等显式 cursor 工具类仍可覆盖。 */
+@layer base {
+  :where(
+    button,
+    a[href],
+    summary,
+    select,
+    label[for],
+    input:is([type="button"], [type="submit"], [type="reset"], [type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"]),
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="checkbox"],
+    [role="radio"],
+    [role="switch"],
+    [role="combobox"]
+  ) {
+    cursor: pointer;
+  }
+}
+
+/* 禁用控件仍需接收鼠标命中才能显示 not-allowed。
+   原生 disabled 和各交互组件的禁用逻辑负责阻止操作。 */
+:is(:disabled, [aria-disabled="true"], [data-disabled]:not([data-disabled="false"])) {
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
 .app-shell {
   background: var(--background);
 }
