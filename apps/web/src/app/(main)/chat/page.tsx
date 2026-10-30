@@ -6,26 +6,31 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageScroller } from "@shadcn/react/message-scroller";
 import { TooltipHint } from "@kqa/ui/components/tooltip";
 import { Skeleton } from "@kqa/ui/components/skeleton";
+import { Button } from "@kqa/ui/components/button";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@kqa/ui/components/input-group";
-import { ArrowDown, ArrowUp, Bot, FileText, Plus, Sparkles, User as UserIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, Bot, Check, Copy, FileText, Plus, Sparkles, User as UserIcon } from "lucide-react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
+import { CitationPanel, type CitationChunk } from "@/components/documents/document-preview";
+import { formatMessageTime } from "@/lib/utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { KnowledgeBaseSelector, type KnowledgeBaseDocument } from "@/components/chat/knowledge-base-selector";
 import { ACCEPT_STRING, useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useSidebar } from "@kqa/ui/components/sidebar";
+import { cn } from "@kqa/ui/lib/utils";
+
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
-  citations?: Array<{ documentId: string; filename: string }> | null;
+  citations?: CitationChunk[] | null;
 }
 
 interface PendingMessage {
@@ -40,6 +45,24 @@ interface ModelSettings {
   llmModel: string;
 }
 
+/** 点击引用来源时暂存的预览状态：整条消息的 citations + 选中的文档 */
+interface ActiveCitation {
+  citations: CitationChunk[];
+  documentId: string;
+}
+
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 800;
+const PANEL_WIDTH_STORAGE_KEY = "kqa.citation-panel-width";
+
+function readStoredPanelWidth() {
+  if (typeof window === "undefined") return PANEL_MAX_WIDTH;
+  const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
+  return Number.isFinite(saved)
+    ? Math.min(Math.max(saved, PANEL_MIN_WIDTH), PANEL_MAX_WIDTH)
+    : PANEL_MAX_WIDTH;
+}
+
 export default function ChatPage() {
   return <Suspense fallback={<ChatHistorySkeleton />}><ChatContent /></Suspense>;
 }
@@ -50,16 +73,57 @@ function ChatContent() {
   const { setActiveConversation, streaming, setStreaming } =
     useChatStore();
   useEffect(() => { setActiveConversation(activeConversationId); }, [activeConversationId, setActiveConversation]);
+  // 切换会话时收起文档预览面板
+  useEffect(() => { setActiveCitations(null); }, [activeConversationId]);
+
+  function openCitationPanel(citations: CitationChunk[], documentId: string) {
+    setActiveCitations({ citations, documentId });
+  }
+
+  function handlePanelResize(clientX: number) {
+    const next = Math.min(
+      Math.max(window.innerWidth - clientX, PANEL_MIN_WIDTH),
+      PANEL_MAX_WIDTH
+    );
+    setPanelWidth(Math.round(next));
+  }
+
+  function handlePanelResizeEnd() {
+    try {
+      window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(panelWidth));
+    } catch {
+      // localStorage 不可用时忽略
+    }
+  }
   const [input, setInput] = useState("");
   const [liveAnswer, setLiveAnswer] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [sendError, setSendError] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedKnowledgeBaseIds, setSelectedKnowledgeBaseIds] = useState<string[]>([]);
+  const [activeCitations, setActiveCitations] = useState<ActiveCitation | null>(null);
+  const [panelWidth, setPanelWidth] = useState(readStoredPanelWidth);
   const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { upload, tasks: uploadTasks, error: uploadError } = useDocumentUpload();
+
+  useEffect(() => {
+    let animationFrame = 0;
+    const focusInput = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => inputRef.current?.focus());
+    };
+
+    window.addEventListener("kqa:new-conversation", focusInput);
+    if (!activeConversationId) focusInput();
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("kqa:new-conversation", focusInput);
+    };
+  }, [activeConversationId]);
 
   const { data: modelSettings } = useQuery<ModelSettings>({
     queryKey: ["chat-model"],
@@ -196,7 +260,9 @@ function ChatContent() {
   return (
     <div className="chat-page flex h-[calc(100dvh-4rem)] flex-col overflow-hidden md:h-dvh">
       <MobileNewConversationButton />
-      <MessageScroller.Provider autoScroll defaultScrollPosition="last-anchor">
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MessageScroller.Provider autoScroll defaultScrollPosition="last-anchor">
         <MessageScroller.Root className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <MessageScroller.Viewport
             id="chat-messages"
@@ -227,18 +293,19 @@ function ChatContent() {
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
                 >
-                  <MessageBubble message={message} />
+                  <MessageBubble message={message} onPreviewCitations={openCitationPanel} />
                 </MessageScroller.Item>
               ))}
               {visiblePendingMessages.map((message) => (
                 <MessageScroller.Item key={message.id} messageId={message.id} scrollAnchor>
-                  <MessageBubble message={message} />
+                  <MessageBubble message={message} onPreviewCitations={openCitationPanel} />
                 </MessageScroller.Item>
               ))}
               {streaming && (
                 <MessageScroller.Item messageId="live-answer">
                   <MessageBubble
                     message={{ id: "live", role: "assistant", content: liveAnswer || "正在思考…" }}
+                    onPreviewCitations={openCitationPanel}
                   />
                 </MessageScroller.Item>
               )}
@@ -277,6 +344,7 @@ function ChatContent() {
               />
               <InputGroup className="chat-composer h-36 gap-2 rounded-3xl border-0 p-4">
                 <InputGroupTextarea
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -346,7 +414,21 @@ function ChatContent() {
             )}
           </div>
         </div>
-      </MessageScroller.Provider>
+          </MessageScroller.Provider>
+        </div>
+
+        {activeCitations && (
+          <>
+            <PanelResizeHandle onResize={handlePanelResize} onResizeEnd={handlePanelResizeEnd} />
+            <CitationPanel
+              citations={activeCitations.citations}
+              initialDocumentId={activeCitations.documentId}
+              width={panelWidth}
+              onClose={() => setActiveCitations(null)}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -367,6 +449,7 @@ function MobileNewConversationButton() {
         onClick={() => {
           setActiveConversation(null);
           router.push("/chat");
+          window.dispatchEvent(new Event("kqa:new-conversation"));
         }}
         aria-label="新建对话"
       >
@@ -385,10 +468,43 @@ function createPendingMessageId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onPreviewCitations,
+}: {
+  message: Message;
+  onPreviewCitations: (citations: CitationChunk[], documentId: string) => void;
+}) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
+  async function copyMessage() {
+    try {
+      await navigator.clipboard.writeText(message.content);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = message.content;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setCopied(true);
+    if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
-    <div className={`flex gap-3.5 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group/message flex gap-3.5 ${isUser ? "flex-row-reverse" : ""}`}>
       <div
         className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
           isUser
@@ -398,26 +514,134 @@ function MessageBubble({ message }: { message: Message }) {
       >
         {isUser ? <UserIcon className="size-4" /> : <Bot className="size-4" />}
       </div>
-      <div
-        className={`min-w-0 max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
-          isUser
-            ? "rounded-tr-md bg-primary text-primary-foreground"
-            : "rounded-tl-md bg-card text-foreground"
-        }`}
-      >
-        {isUser ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : <MessageMarkdown content={message.content} />}
-        {message.citations && message.citations.length > 0 && (
-          <div className="mt-2 pt-2 text-xs opacity-80">
-            <p className="mb-1 font-medium">引用来源：</p>
-            {message.citations.map((c, i) => (
-              <span key={i} className="mr-2 inline-flex items-center gap-1">
-                <FileText className="size-3" />
-                {c.filename}
+      <div className={`flex min-w-0 max-w-[85%] flex-col sm:max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
+        <div
+          className={`min-w-0 rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+            isUser
+              ? "rounded-tr-md bg-primary text-primary-foreground"
+              : "rounded-tl-md bg-card text-foreground"
+          }`}
+        >
+          {isUser ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : <MessageMarkdown content={message.content} />}
+          {message.citations && message.citations.length > 0 && (
+            <CitationPreview citations={message.citations} onSelect={onPreviewCitations} />
+          )}
+        </div>
+        {message.id !== "live" && (
+          <div className="mt-1 flex items-center gap-1.5 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover/message:opacity-100 md:group-focus-within/message:opacity-100">
+            {message.createdAt && (
+              <span className="tabular-nums text-xs text-muted-foreground">
+                {formatMessageTime(message.createdAt)}
               </span>
-            ))}
+            )}
+            <TooltipHint content={copied ? "已复制" : "复制消息"}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 rounded-lg text-muted-foreground"
+                onClick={() => void copyMessage()}
+                aria-label={copied ? "消息已复制" : "复制消息"}
+              >
+                {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+              </Button>
+            </TooltipHint>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 消息气泡里的引用来源列表：点击后在右侧预览面板打开对应文档。 */
+function CitationPreview({
+  citations,
+  onSelect,
+}: {
+  citations: CitationChunk[];
+  onSelect: (citations: CitationChunk[], documentId: string) => void;
+}) {
+  // 引用按钮按文档去重；完整 citations 交给预览面板，面板内可切换文档
+  const documentButtons = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const citation of citations) {
+      if (!seen.has(citation.documentId)) seen.set(citation.documentId, citation.filename);
+    }
+    return [...seen.entries()].map(([documentId, filename]) => ({ documentId, filename }));
+  }, [citations]);
+
+  return (
+    <div className="mt-2 flex flex-col items-start gap-1 pt-2 text-xs opacity-80">
+      <p className="font-medium">引用来源：</p>
+      {documentButtons.map(({ documentId, filename }) => (
+        <button
+          key={documentId}
+          type="button"
+          className="group/citation inline-flex max-w-full cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onClick={() => onSelect(citations, documentId)}
+          title="预览引用文档"
+        >
+          <FileText className="size-3 shrink-0" />
+          <span className="truncate">{filename}</span>
+          <ArrowUpRight aria-hidden="true" className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover/citation:opacity-100 group-focus-visible/citation:opacity-100 [@media(hover:none)]:opacity-100" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 聊天区与文档预览面板之间的拖拽手柄。
+ * hover 显示拖拽光标与细线高亮；拖拽期间通过 html[data-panel-resizing]
+ * 让侧栏右缘联动高亮、全局切换 col-resize 光标并禁止文本选中（见 globals.css）。
+ */
+function PanelResizeHandle({
+  onResize,
+  onResizeEnd,
+}: {
+  onResize: (clientX: number) => void;
+  onResizeEnd: () => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (!dragging) return;
+    document.documentElement.setAttribute("data-panel-resizing", "true");
+    return () => document.documentElement.removeAttribute("data-panel-resizing");
+  }, [dragging]);
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整文档预览宽度"
+      className={cn(
+        "group/handle relative hidden w-2 shrink-0 cursor-col-resize touch-none transition-colors md:block",
+        "hover:bg-primary/10",
+        dragging && "bg-primary/20"
+      )}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(true);
+      }}
+      onPointerMove={(event) => {
+        if (dragging) onResize(event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        setDragging(false);
+        onResizeEnd();
+      }}
+      onPointerCancel={() => setDragging(false)}
+    >
+      <div
+        className={cn(
+          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover/handle:bg-primary/50",
+          dragging && "bg-primary/60"
+        )}
+      />
     </div>
   );
 }

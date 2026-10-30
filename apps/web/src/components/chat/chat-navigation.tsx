@@ -270,6 +270,7 @@ export function ChatNavigation() {
     setExpanded(true);
     if (isMobile) setMobileOpen(false);
     router.push("/chat");
+    window.dispatchEvent(new Event("kqa:new-conversation"));
   }
 
   function selectConversation(conversationId: string) {

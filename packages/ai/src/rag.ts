@@ -20,30 +20,33 @@ const prompt = ChatPromptTemplate.fromMessages([
   ["human", "{question}"],
 ]);
 
-export interface RagResult {
-  answer: string;
-  citations: Array<{
-    documentId: string;
-    filename: string;
-    chunkIndex: number;
-  }>;
+export interface RagCitation {
+  documentId: string;
+  filename: string;
+  chunkIndex: number;
+  /** 召回的段落原文，前端据此展示/高亮引用段落 */
+  content: string;
+  /** 相似度得分（COSINE，越高越相关） */
+  score: number;
 }
 
 function formatContext(docs: Document[]) {
   return docs.map((d, i) => `[资料${i + 1}] ${d.pageContent}`).join("\n\n");
 }
 
-function toCitations(docs: Document[]): RagResult["citations"] {
+function toCitations(results: Array<[Document, number]>): RagCitation[] {
   const seen = new Set<string>();
-  const out: RagResult["citations"] = [];
-  for (const d of docs) {
-    const key = `${d.metadata.documentId}`;
+  const out: RagCitation[] = [];
+  for (const [d, score] of results) {
+    const key = `${d.metadata.documentId}:${d.metadata.chunkIndex}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
       documentId: d.metadata.documentId,
       filename: d.metadata.filename,
       chunkIndex: d.metadata.chunkIndex,
+      content: d.pageContent,
+      score,
     });
   }
   return out;
@@ -55,7 +58,7 @@ export async function streamRagAnswer(
   tenantId: string,
   config: ModelConfig,
   documentIds: string[] | null = null
-): Promise<{ stream: AsyncIterable<string>; citations: RagResult["citations"] }> {
+): Promise<{ stream: AsyncIterable<string>; citations: RagCitation[] }> {
   const embeddings = createEmbeddings(config);
   const store = await getVectorStore(embeddings);
 
@@ -66,7 +69,8 @@ export async function streamRagAnswer(
     : documentIds.length === 0
       ? ' && documentId == "__no_permitted_document__"'
       : ` && documentId in [${documentIds.map((id) => `"${id}"`).join(",")}]`;
-  const docs = (await store.similaritySearch(question, 4, `tenantId == "${tenantId}"${documentFilter}`)) as Document[];
+  const results = (await store.similaritySearchWithScore(question, 4, `tenantId == "${tenantId}"${documentFilter}`)) as Array<[Document, number]>;
+  const docs = results.map(([doc]) => doc);
 
   const chain = RunnableSequence.from([
     { context: new RunnablePassthrough(), question: new RunnablePassthrough() },
@@ -80,5 +84,5 @@ export async function streamRagAnswer(
     question,
   });
 
-  return { stream, citations: toCitations(docs) };
+  return { stream, citations: toCitations(results) };
 }

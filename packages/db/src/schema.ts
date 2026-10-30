@@ -1,4 +1,10 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, unique, customType } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Uint8Array }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 /** 用户 —— 由 auth app 写入，web app 只读 */
 export const users = pgTable("users", {
@@ -49,6 +55,11 @@ export const documents = pgTable(
     error: text("error"),
     /** 上传时提取的原文，用于失败后不必重新上传即可重新入库。 */
     sourceText: text("source_text"),
+    /** MinIO 对象 key 与持久化地址；bucket 保持私有，通过鉴权接口读取。 */
+    objectKey: text("object_key"),
+    objectUrl: text("object_url"),
+    /** 兼容迁移到 MinIO 之前上传的文档；新上传不再写入此列。 */
+    fileData: bytea("file_data"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     /** 软删除：有值表示已删除，列表查询默认过滤掉 */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -78,7 +89,7 @@ export const messages = pgTable(
       .notNull(),
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
-    /** RAG 命中的文档引用 [{ documentId, filename, chunkIndex, score }] */
+    /** RAG 命中的引用段落 [{ documentId, filename, chunkIndex, content, score }] */
     citations: jsonb("citations"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

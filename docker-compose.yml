@@ -78,7 +78,7 @@ services:
       - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
+      MINIO_ADDRESS: minio:9000 # Milvus standalone 运行时需要一块对象存储来放向量数据文件、索引文件和写入日志，默认就是 MinIO（或 S3）
     ports:
       - "19530:19530"
       - "9091:9091"

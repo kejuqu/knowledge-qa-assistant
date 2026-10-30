@@ -150,6 +150,16 @@ body {
   display: none;
 }
 
+/* 文档预览面板拖拽中（html[data-panel-resizing]，由 PanelResizeHandle 设置）：
+   全局切换拖拽光标、禁止文本选中。 */
+html[data-panel-resizing] {
+  cursor: col-resize;
+}
+
+html[data-panel-resizing] body {
+  user-select: none;
+}
+
 /* 聊天区继承全局主题，输入框使用卡片背景。 */
 .chat-page {
   background: var(--background);

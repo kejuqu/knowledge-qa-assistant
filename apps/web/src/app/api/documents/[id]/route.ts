@@ -4,6 +4,7 @@ import { db, documents } from "@kqa/db";
 import { getSessionUser } from "@kqa/auth/next";
 import { deleteDocumentVectors } from "@kqa/ai";
 import { publish } from "@/lib/events";
+import { deleteDocumentObject } from "@/lib/object-storage";
 
 /**
  * DELETE /api/documents/:id
@@ -37,6 +38,12 @@ export async function DELETE(
     }
   } catch (err) {
     console.error(`[delete] failed to remove vectors for ${doc.id}:`, err);
+  }
+
+  try {
+    if (doc.objectKey) await deleteDocumentObject(doc.objectKey);
+  } catch (err) {
+    console.error(`[delete] failed to remove object for ${doc.id}:`, err);
   }
 
   // 2. 软删除 PG 记录

@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+declare global {
+  interface Window {
+    __HYDRATED__?: boolean;
+    __CLICKED__?: boolean;
+  }
+}
+
 export default function TestHydrationPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {

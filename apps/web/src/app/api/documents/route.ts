@@ -4,6 +4,12 @@ import { db, documents } from "@kqa/db";
 import { getSessionUser } from "@kqa/auth/next";
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from "@kqa/ai";
 import { enqueueDocument } from "@/lib/queue";
+import {
+  createDocumentObjectKey,
+  createDocumentObjectUrl,
+  deleteDocumentObject,
+  uploadDocumentObject,
+} from "@/lib/object-storage";
 
 // 输入安全：单文件上限 20MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -22,11 +28,20 @@ export async function GET() {
       status: documents.status,
       error: documents.error,
       createdAt: documents.createdAt,
+      objectKey: documents.objectKey,
+      fileData: documents.fileData,
     })
     .from(documents)
     .where(and(eq(documents.tenantId, user.tenantId), isNull(documents.deletedAt)))
     .orderBy(desc(documents.createdAt));
-  return NextResponse.json(rows);
+
+  // 可下载地址走鉴权代理（从 MinIO/历史库流式输出），bucket 始终保持私有
+  return NextResponse.json(
+    rows.map(({ objectKey, fileData, ...row }) => ({
+      ...row,
+      downloadUrl: objectKey || fileData ? `/api/documents/${row.id}/content?download=1` : null,
+    }))
+  );
 }
 
 /**
@@ -69,18 +84,38 @@ export async function POST(request: Request) {
     );
   }
 
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      tenantId: user.tenantId,
-      ownerId: user.sub,
-      filename: file.name,
-      mimeType: file.type || "application/octet-stream",
-      sizeBytes: file.size,
-      status: "pending",
-      sourceText: text,
-    })
-    .returning();
+  const documentId = crypto.randomUUID();
+  const mimeType = file.type || "application/octet-stream";
+  const objectKey = createDocumentObjectKey(user.tenantId, documentId, file.name);
+
+  try {
+    await uploadDocumentObject(objectKey, buffer, mimeType);
+  } catch (error) {
+    console.error("[upload] failed to persist document in MinIO:", error);
+    return NextResponse.json({ error: "文件存储失败，请稍后重试" }, { status: 502 });
+  }
+
+  let doc: typeof documents.$inferSelect;
+  try {
+    [doc] = await db
+      .insert(documents)
+      .values({
+        id: documentId,
+        tenantId: user.tenantId,
+        ownerId: user.sub,
+        filename: file.name,
+        mimeType,
+        sizeBytes: file.size,
+        status: "pending",
+        sourceText: text,
+        objectKey,
+        objectUrl: createDocumentObjectUrl(objectKey),
+      })
+      .returning();
+  } catch (error) {
+    await deleteDocumentObject(objectKey).catch(() => undefined);
+    throw error;
+  }
 
   // 解析入库成功即响应；向量化交给后台队列，状态通过 SSE 推送
   enqueueDocument({

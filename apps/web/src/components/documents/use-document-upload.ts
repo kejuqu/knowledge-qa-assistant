@@ -44,6 +44,8 @@ export function useDocumentUpload() {
       xhr.timeout = 30_000; // 30 秒超时，避免网络卡死无限等待
 
       xhr.upload.onprogress = (e) => {
+        // ProgressEvent.lengthComputable 是只读布尔属性，标记这个进度事件对应的资源总长度是否可以计算。
+        // 如果它是 false，那么 ProgressEvent.total 这个属性的值就没有意义。
         if (e.lengthComputable) {
           updateTask(id, { progress: Math.round((e.loaded / e.total) * 90) });
         }

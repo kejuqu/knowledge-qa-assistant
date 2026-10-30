@@ -48,3 +48,27 @@ export async function deleteDocumentVectors(documentId: string): Promise<void> {
     await client.closeConnection();
   }
 }
+
+/** 按租户与文档读取实际入库分块，不需要生成查询向量。 */
+export async function getDocumentChunks(documentId: string, tenantId: string) {
+  const { MilvusClient } = await import("@zilliz/milvus2-sdk-node");
+  const client = new MilvusClient({ address: getMilvusAddress() });
+  try {
+    const iterator = await client.queryIterator({
+      collection_name: MILVUS_COLLECTION,
+      filter: `documentId == ${JSON.stringify(documentId)} and tenantId == ${JSON.stringify(tenantId)}`,
+      output_fields: ["text", "chunkIndex"],
+      batchSize: 1000,
+    });
+    const chunks: Array<{ content: string; chunkIndex: number }> = [];
+    for await (const batch of iterator) {
+      if (!batch.length) break;
+      for (const row of batch) {
+        chunks.push({ content: String(row.text), chunkIndex: Number(row.chunkIndex) });
+      }
+    }
+    return chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+  } finally {
+    await client.closeConnection();
+  }
+}

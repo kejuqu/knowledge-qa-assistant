@@ -7,7 +7,7 @@ import { cn } from "../lib/utils";
 import { Button } from "./button";
 
 const DEFAULT_WIDTH = 300;
-const MIN_WIDTH = 280;
+const MIN_WIDTH = 180;
 const MAX_WIDTH = 440;
 const COLLAPSED_WIDTH = 68;
 
