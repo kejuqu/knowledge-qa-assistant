@@ -29,7 +29,7 @@ knowledge-qa-assistant/
 │   ├── auth/                 # @kqa/auth      JWT 会话协议（签发/校验/cookie 约定）
 │   ├── ai/                   # @kqa/ai        LangChain 封装：模型初始化/入库/RAG
 │   └── tsconfig/             # @kqa/tsconfig  共享 TS 配置
-├── docker-compose.yml        # postgres + etcd + minio + milvus
+├── docker-compose.yml        # postgres + etcd + minio + milvus + attu
 └── turbo.json
 ```
 
@@ -62,7 +62,7 @@ app.lvh.me:3100 ──proxy.ts 统一校验 JWT──> 服务端独立验证身�
 # 1. 安装依赖
 pnpm install
 
-# 2. 启动基础设施（postgres + etcd + minio + milvus）
+# 2. 启动基础设施（postgres + etcd + minio + milvus + attu）
 pnpm docker:up
 
 # 3. 初始化数据库表结构
@@ -80,6 +80,7 @@ pnpm dev
 - 主应用：http://app.lvh.me:3100 （如果未登录自动跳转认证中心）
 - 认证中心：http://auth.lvh.me:3001
 - MinIO 控制台：http://localhost:9001 （minioadmin / minioadmin）
+- Attu（Milvus GUI）：http://localhost:8000 → 看向量集合、逐行数据、手动试检索；`docker compose up -d` 自动拉起，详见 [docs/nextjs-monorepo-postgres-milvus-rag.md](docs/nextjs-monorepo-postgres-milvus-rag.md) 第 10 节
 
 ## 接入本地模型（如 Ollama）
 

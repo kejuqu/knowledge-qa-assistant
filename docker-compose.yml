@@ -96,6 +96,18 @@ services:
       minio:
         condition: service_healthy
 
+  # Attu：Milvus 官方 GUI，浏览器打开 http://localhost:8000，地址填 milvus:19530
+  attu:
+    image: zilliz/attu:v2.4.4
+    container_name: kqa-attu
+    environment:
+      MILVUS_URL: milvus:19530
+    ports:
+      - "8000:3000"
+    depends_on:
+      milvus:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
