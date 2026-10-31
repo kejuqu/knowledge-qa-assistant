@@ -434,14 +434,14 @@ function PreviewFrame(props: React.IframeHTMLAttributes<HTMLIFrameElement>) {
   const source = props.srcDoc ?? props.src;
   const loading = loadedSource !== source;
   return (
-    <div className="relative h-full min-h-[70dvh]">
+    <div className="relative h-full min-h-[70dvh] overflow-hidden rounded-xl border-0 bg-muted/20">
       {loading && <div className="absolute inset-0 bg-background"><PreviewSkeleton /></div>}
       <iframe
         {...props}
         key={source}
         referrerPolicy="no-referrer"
         aria-busy={loading}
-        className={cn("h-full min-h-[70dvh] w-full rounded-md border border-border bg-white", loading && "invisible")}
+        className={cn("block h-full min-h-[70dvh] w-full border-0 bg-white", loading && "invisible")}
         onLoad={() => setLoadedSource(source)}
       />
     </div>
