@@ -19,7 +19,7 @@ import { CitationPanel, type CitationChunk } from "@/components/documents/docume
 import { formatMessageTime } from "@/lib/utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { KnowledgeBaseSelector, type KnowledgeBaseDocument } from "@/components/chat/knowledge-base-selector";
-import { useTenantRole } from "@/components/tenant-role";
+import { usePermission } from "@/components/tenant-role";
 import { ACCEPT_STRING, useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useSidebar } from "@kqa/ui/components/sidebar";
@@ -69,7 +69,7 @@ export default function ChatPage() {
 }
 
 function ChatContent() {
-  const isAdmin = useTenantRole() === "admin";
+  const canUpload = usePermission("documents.upload");
   const searchParams = useSearchParams();
   const activeConversationId = searchParams.get("id");
   const { setActiveConversation, streaming, setStreaming } =
@@ -336,7 +336,7 @@ function ChatContent() {
                 void send();
               }}
             >
-              {isAdmin && <input
+              {canUpload && <input
                 ref={fileInputRef}
                 type="file"
                 accept={ACCEPT_STRING}
@@ -363,7 +363,7 @@ function ChatContent() {
                   className="chat-composer-input min-h-0 p-0"
                 />
                 <InputGroupAddon align="block-end" className="gap-3 p-0">
-                  {isAdmin && <TooltipHint content="上传知识库">
+                  {canUpload && <TooltipHint content="上传知识库">
                     <span className="inline-flex shrink-0" tabIndex={uploadTasks.length > 0 ? 0 : undefined}>
                       <InputGroupButton
                         type="button"

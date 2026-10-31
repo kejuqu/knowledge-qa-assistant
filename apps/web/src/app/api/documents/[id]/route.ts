@@ -1,3 +1,4 @@
+import { hasPermission } from "@kqa/auth/permissions";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
@@ -17,8 +18,8 @@ export async function DELETE(
 ) {
   const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "仅租户管理员可管理知识库文档" }, { status: 403 });
+  if (!hasPermission(user, "documents.delete")) {
+    return NextResponse.json({ error: "没有删除知识库文档的权限" }, { status: 403 });
   }
 
   const { id } = await params;

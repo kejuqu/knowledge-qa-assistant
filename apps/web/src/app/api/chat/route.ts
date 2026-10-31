@@ -1,7 +1,7 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db, conversations, documents, messages } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 import { streamRagAnswer } from "@kqa/ai";
 import { getModelConfigForTenant } from "@/lib/model-config";
 
@@ -11,7 +11,7 @@ import { getModelConfigForTenant } from "@/lib/model-config";
  * 响应：text/plain 流（首个 chunk 前先发一行 JSON 元信息：会话、用户消息和引用 ID）
  */
 export async function POST(request: Request) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { conversationId, message, documentIds } = await request.json();

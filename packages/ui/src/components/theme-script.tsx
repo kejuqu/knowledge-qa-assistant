@@ -1,4 +1,5 @@
-const THEME_SCRIPT = `
+/** 由各应用根布局的 next/script 在 hydration 前执行。 */
+export const THEME_SCRIPT = `
 (() => {
   try {
     const theme = localStorage.getItem("kqa-theme");
@@ -8,8 +9,3 @@ const THEME_SCRIPT = `
   } catch {}
 })();
 `;
-
-/** 在首次绘制前恢复用户选择；未选择时由 CSS 跟随系统主题。 */
-export function ThemeScript() {
-  return <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />;
-}

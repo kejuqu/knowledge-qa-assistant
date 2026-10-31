@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@kqa/ui/components/button";
 import { TooltipHint } from "@kqa/ui/components/tooltip";
 import { useSidebar } from "@kqa/ui/components/sidebar";
@@ -15,21 +16,28 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@kqa/ui/components/dropdown-menu";
-import { ChevronsLeft, LogOut, Palette } from "lucide-react";
+import { Camera, LogOut, Palette } from "lucide-react";
 import { useTenantRole } from "./tenant-role";
 import { ThemeOptions } from "./theme-toggle";
+import { UserAvatar } from "./user-avatar";
+import { AvatarSettings } from "./avatar-settings";
+import { useProfile } from "./use-profile";
 
 interface UserMenuProps {
   name: string;
   email: string;
   signOutUrl: string;
+  avatarUrl: string | null;
 }
 
-export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
+export function UserMenu({ name, email, signOutUrl, avatarUrl }: UserMenuProps) {
   const { collapsed } = useSidebar();
   const role = useTenantRole();
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const { data: profile } = useProfile({ name, email, avatarUrl });
 
   return (
+    <>
     <DropdownMenu>
       <TooltipHint content="用户菜单" side="right" hidden={!collapsed}>
         <DropdownMenuTrigger asChild>
@@ -40,9 +48,7 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
             }`}
             aria-label="打开用户菜单"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-foreground">
-              <ChevronsLeft />
-            </span>
+            <UserAvatar name={profile.name} src={profile.avatarUrl} />
             {!collapsed && (
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 text-sm font-medium">
@@ -59,7 +65,11 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
           </Button>
         </DropdownMenuTrigger>
       </TooltipHint>
-      <DropdownMenuContent side="top" align="start" sideOffset={8} collisionPadding={12} className="w-72 max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-2xl border-0 p-2 shadow-lg">
+      <DropdownMenuContent side="top" align="start" sideOffset={8} collisionPadding={12} onCloseAutoFocus={(event) => { if (avatarOpen) event.preventDefault(); }} className="w-72 max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto rounded-2xl border-0 p-2 shadow-lg">
+        <DropdownMenuGroup>
+          <DropdownMenuItem className="rounded-lg px-3 py-2.5" onSelect={() => setAvatarOpen(true)}><Camera />设置头像</DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
         <DropdownMenuGroup className="md:hidden">
           <DropdownMenuLabel className="flex items-center gap-2 px-2 pb-2"><Palette className="size-4" />主题</DropdownMenuLabel>
           <ThemeOptions compact />
@@ -99,5 +109,7 @@ export function UserMenu({ name, email, signOutUrl }: UserMenuProps) {
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+    <AvatarSettings open={avatarOpen} onOpenChange={setAvatarOpen} profile={profile} />
+    </>
   );
 }

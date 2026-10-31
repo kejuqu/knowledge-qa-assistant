@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@kqa/ui/components/button";
 import { Input } from "@kqa/ui/components/input";
 import { Label } from "@kqa/ui/components/label";
+import { TooltipHint, TooltipProvider } from "@kqa/ui/components/tooltip";
 import {
   Card,
   CardContent,
@@ -12,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@kqa/ui/components/card";
-import { BookOpenCheck } from "lucide-react";
+import { BookOpenCheck, CircleHelp } from "lucide-react";
 
 const WEB_APP_URL = process.env.NEXT_PUBLIC_WEB_APP_URL ?? "http://app.lvh.me:3100";
 
@@ -41,7 +42,7 @@ export default function SignUpPage() {
       setError(data.error ?? "注册失败");
       return;
     }
-    window.location.href = WEB_APP_URL;
+    window.location.href = data.membershipStatus === "active" ? WEB_APP_URL : `${WEB_APP_URL}/membership`;
   }
 
   return (
@@ -52,13 +53,22 @@ export default function SignUpPage() {
             <BookOpenCheck className="size-5" />
           </div>
           <CardTitle className="text-xl">创建账号</CardTitle>
-          <CardDescription>注册后即可使用企业知识库</CardDescription>
+          <CardDescription>创建新团队，或申请加入已有团队</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="tenantName">企业/团队名称</Label>
-              <Input id="tenantName" name="tenantName" required placeholder="例如：Acme 科技" />
+              <div className="flex items-center gap-2">
+                <Label htmlFor="tenantName">企业/团队名称</Label>
+                <TooltipProvider>
+                  <TooltipHint content="名称不存在时创建团队；已有同名团队时，需管理员审批后加入">
+                    <Button type="button" variant="ghost" size="icon" className="size-5" aria-label="企业/团队名称说明">
+                      <CircleHelp />
+                    </Button>
+                  </TooltipHint>
+                </TooltipProvider>
+              </div>
+              <Input id="tenantName" name="tenantName" required maxLength={120} placeholder="例如：Acme 科技" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="name">姓名</Label>
@@ -70,7 +80,7 @@ export default function SignUpPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">密码</Label>
-              <Input id="password" name="password" type="password" required minLength={6} />
+              <Input id="password" name="password" type="password" required minLength={6} placeholder="请输入你的密码" />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>

@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@kqa/ui/components/button";
 import { Input } from "@kqa/ui/components/input";
-import { Label } from "@kqa/ui/components/label";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@kqa/ui/components/field";
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
+  CardFooter,
   CardTitle,
 } from "@kqa/ui/components/card";
-import { Loader2, Save } from "lucide-react";
+import { usePermission } from "@/components/tenant-role";
+import { Bot, Check, Layers2, Loader2, Save } from "lucide-react";
 
 interface ModelSettings {
   llmBaseUrl: string;
@@ -35,12 +37,14 @@ const FIELDS: Array<{ key: keyof ModelSettings; label: string; hint: string; sec
 ];
 
 export default function SettingsPage() {
+  const canManage = usePermission("settings.manage");
   const [form, setForm] = useState<ModelSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const { data } = useQuery<ModelSettings>({
     queryKey: ["settings"],
+    enabled: canManage,
     queryFn: () => fetch("/api/settings").then((r) => r.json()),
   });
 
@@ -49,7 +53,7 @@ export default function SettingsPage() {
   }, [data, form]);
 
   async function save() {
-    if (!form) return;
+    if (!form || !canManage) return;
     setSaving(true);
     setSaved(false);
     const res = await fetch("/api/settings", {
@@ -67,49 +71,69 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  if (!canManage) return <p className="p-6 text-muted-foreground">你没有管理模型配置的权限，请联系团队管理员。</p>;
+
   if (!form) {
     return <SettingsSkeleton />;
   }
 
   return (
     <div className="p-6">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-3xl">
         <h1 className="mb-1 text-xl font-semibold">模型设置</h1>
         <p className="mb-6 text-sm text-muted-foreground">
           任何 OpenAI 兼容协议的服务都能接入（OpenAI / DeepSeek / Ollama 本地模型 / 企业网关）
         </p>
-        <Card className="border-0 bg-transparent shadow-none">
+        <Card className="overflow-hidden border border-border/60">
           <CardHeader>
             <CardTitle className="text-base">LangChain 模型配置</CardTitle>
             <CardDescription>保存后立即对问答与文档向量化生效</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {FIELDS.map((f) => (
-              <div key={f.key} className="space-y-2">
-                <Label htmlFor={f.key}>{f.label}</Label>
-                <Input
-                  id={f.key}
-                  type={f.secret ? "password" : "text"}
-                  value={form[f.key]}
-                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                />
-                {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
-              </div>
+          <CardContent className="grid gap-5 md:grid-cols-2">
+            {[
+              { title: "问答模型", description: "用于对话生成与知识库问答", icon: Bot, fields: FIELDS.slice(0, 3) },
+              { title: "文档向量化", description: "用于文档检索与语义匹配", icon: Layers2, fields: FIELDS.slice(3) },
+            ].map((group) => (
+              <FieldSet key={group.title} className="min-w-0 rounded-xl border border-border/60 bg-background/60 p-4">
+                <FieldLegend>
+                  <span className="inline-flex items-center gap-2"><group.icon aria-hidden className="size-4 text-primary" />{group.title}</span>
+                </FieldLegend>
+                <p className="mb-2 text-xs text-muted-foreground">{group.description}</p>
+                <FieldGroup className="gap-5">
+                  {group.fields.map((f) => (
+                    <Field key={f.key}>
+                      <FieldLabel htmlFor={f.key}>{f.label}</FieldLabel>
+                      <Input
+                        id={f.key}
+                        aria-describedby={f.hint ? `${f.key}-hint` : undefined}
+                        type={f.secret ? "password" : "text"}
+                        value={form[f.key]}
+                        onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                      />
+                      {f.hint && <FieldDescription id={`${f.key}-hint`} className="break-words text-xs leading-relaxed">{f.hint}</FieldDescription>}
+                    </Field>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
             ))}
+          </CardContent>
+          <CardFooter className="flex-col items-stretch gap-3 border-t border-border/60 bg-muted/30 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <p role="status" className="text-xs text-muted-foreground">{saved ? "配置已保存，现已生效" : "保存后应用于当前团队"}</p>
             <Button
               onClick={save}
-              disabled={saving || form.role !== "admin"}
-              className="w-full"
+              disabled={saving || !canManage}
+              size="lg"
+              className="w-full text-white sm:w-auto"
             >
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              {saved ? "已保存 ✓" : "保存配置"}
+              {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : saved ? <Check data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+              {saving ? "保存中…" : saved ? "已保存" : "保存配置"}
             </Button>
-            {form.role !== "admin" && (
+            {!canManage && (
               <p className="text-center text-xs text-muted-foreground">
-                模型配置是租户级资产，仅管理员可修改
+                模型配置是租户级资产，需要模型设置权限才可修改
               </p>
             )}
-          </CardContent>
+          </CardFooter>
         </Card>
       </div>
     </div>
@@ -119,12 +143,12 @@ export default function SettingsPage() {
 function SettingsSkeleton() {
   return (
     <div className="p-6" aria-label="正在加载模型设置" role="status">
-      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-6 w-28" />
           <Skeleton className="h-4 w-4/5" />
         </div>
-        <Card className="border-0 bg-transparent shadow-none">
+        <Card className="overflow-hidden border border-border/60">
           <CardHeader className="flex flex-col gap-2">
             <Skeleton className="h-5 w-36" />
             <Skeleton className="h-4 w-2/3" />

@@ -1,12 +1,14 @@
+import { hasPermission } from "@kqa/auth/permissions";
+import { getTenantUser } from "@/lib/tenant-user";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, modelSettings } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 import { getModelConfigForTenant } from "@/lib/model-config";
 
 export async function GET() {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!hasPermission(user, "settings.manage")) return NextResponse.json({ error: "没有管理模型配置的权限" }, { status: 403 });
   const config = await getModelConfigForTenant(user.tenantId);
   // apiKey 脱敏回显
   return NextResponse.json({
@@ -18,11 +20,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   // RBAC：模型配置是租户级资产，仅 admin 可改
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "仅管理员可修改模型配置" }, { status: 403 });
+  if (!hasPermission(user, "settings.manage")) {
+    return NextResponse.json({ error: "没有管理模型配置的权限" }, { status: 403 });
   }
 
   const body = await request.json();

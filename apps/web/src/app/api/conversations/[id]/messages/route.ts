@@ -1,13 +1,13 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
 import { db, messages, conversations } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;

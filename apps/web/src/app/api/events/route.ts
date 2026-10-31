@@ -1,6 +1,6 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { db, documents } from "@kqa/db";
 import { eq } from "drizzle-orm";
-import { getSessionUser } from "@kqa/auth/next";
 import { subscribe } from "@/lib/events";
 
 /**
@@ -8,7 +8,7 @@ import { subscribe } from "@/lib/events";
  * 连接建立时补发一次全量快照，之后增量推送单条变更；断开时自动取消订阅。
  */
 export async function GET() {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return new Response("unauthorized", { status: 401 });
 
   const encoder = new TextEncoder();

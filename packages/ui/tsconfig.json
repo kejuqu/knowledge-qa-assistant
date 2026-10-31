@@ -1,4 +1,7 @@
 {
   "extends": "@kqa/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "paths": { "@kqa/ui/*": ["./src/*"] }
+  },
   "include": ["src"]
 }

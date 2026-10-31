@@ -1,14 +1,14 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db, conversations } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 
 type Context = { params: Promise<{ id: string }> };
 const validId =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function PATCH(request: Request, { params }: Context) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
@@ -46,7 +46,7 @@ export async function PATCH(request: Request, { params }: Context) {
 }
 
 export async function DELETE(_request: Request, { params }: Context) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;

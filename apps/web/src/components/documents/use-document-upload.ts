@@ -1,6 +1,6 @@
 "use client";
 
-import { useTenantRole } from "@/components/tenant-role";
+import { usePermission } from "@/components/tenant-role";
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,7 +14,7 @@ export interface UploadTask {
 }
 
 export function useDocumentUpload() {
-  const isAdmin = useTenantRole() === "admin";
+  const canUpload = usePermission("documents.upload");
   const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
@@ -87,8 +87,8 @@ export function useDocumentUpload() {
   }
 
   async function upload(selection: File | File[]) {
-    if (!isAdmin) {
-      setError("仅租户管理员可上传知识库文档");
+    if (!canUpload) {
+      setError("没有上传知识库文档的权限");
       return;
     }
     const files = Array.isArray(selection) ? selection : [selection];

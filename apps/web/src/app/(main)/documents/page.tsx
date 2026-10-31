@@ -1,6 +1,6 @@
 "use client";
 
-import { useTenantRole } from "@/components/tenant-role";
+import { usePermission } from "@/components/tenant-role";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import { UploadButton } from "@/components/documents/upload-button";
@@ -11,7 +11,7 @@ import { useDocumentUpload } from "@/components/documents/use-document-upload";
 import { useDocumentEvents } from "@/components/documents/use-document-events";
 
 export default function DocumentsPage() {
-  const isAdmin = useTenantRole() === "admin";
+  const canUpload = usePermission("documents.upload");
   const { upload, tasks, error } = useDocumentUpload();
   // SSE：服务端处理状态变更实时推送到 TanStack Query 缓存
   useDocumentEvents();
@@ -24,14 +24,14 @@ export default function DocumentsPage() {
   return (
     <div className="p-6">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
+        <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold">知识库</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               支持 PDF / Word(docx) / Markdown / TXT / HTML，解析后自动切分并向量化到 Milvus
             </p>
           </div>
-          {isAdmin && docs.length > 0 && <UploadButton onSelect={upload} />}
+          {canUpload && docs.length > 0 && <UploadButton onSelect={upload} />}
         </div>
 
         {error && <p role="alert" className="mb-4 whitespace-pre-line text-sm text-destructive">{error}</p>}
@@ -41,7 +41,7 @@ export default function DocumentsPage() {
         {isLoading ? (
           <DocumentListSkeleton />
         ) : docs.length === 0 && tasks.length === 0 ? (
-          isAdmin ? <EmptyState onSelect={upload} /> : (
+          canUpload ? <EmptyState onSelect={upload} /> : (
             <p className="py-20 text-center text-sm text-muted-foreground">知识库暂无文档，请联系管理员上传。</p>
           )
         ) : (

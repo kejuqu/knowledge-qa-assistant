@@ -1,6 +1,6 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 import { renderDocxPreviewHtml, renderSafePreviewHtml, DOCX_PREVIEW_CSP } from "@kqa/ai";
 import { getPreviewType } from "@/lib/utils";
 import { readDocumentObject } from "@/lib/object-storage";
@@ -9,7 +9,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;

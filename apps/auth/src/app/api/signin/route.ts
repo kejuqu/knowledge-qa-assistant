@@ -11,14 +11,14 @@ import {
 
 export async function POST(request: Request) {
   const { email, password } = await request.json();
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
     return NextResponse.json({ error: "请输入邮箱和密码" }, { status: 400 });
   }
 
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.email, email.trim().toLowerCase()))
     .limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return NextResponse.json({ error: "邮箱或密码错误" }, { status: 401 });
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     .select({
       tenantId: tenantMembers.tenantId,
       role: tenantMembers.role,
+      status: tenantMembers.status,
       tenantName: tenants.name,
     })
     .from(tenantMembers)
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     role: membership.role,
   });
 
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true, membershipStatus: membership.status });
 
   // response.cookies.set() 这个便捷 API，能在响应上挂 Set-Cookie 头，必须运行在 Route Handler
   response.cookies.set(SESSION_COOKIE, token, {

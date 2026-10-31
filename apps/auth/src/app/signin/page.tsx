@@ -40,7 +40,7 @@ export default function SignInPage() {
       return;
     }
     // 登录成功，跳回主应用（cookie 已写在父域名上，子域名直接生效）
-    window.location.href = WEB_APP_URL;
+    window.location.href = data.membershipStatus === "active" ? WEB_APP_URL : `${WEB_APP_URL}/membership`;
   }
 
   return (

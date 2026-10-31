@@ -1,14 +1,14 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { NextResponse } from "next/server";
 import { and, desc, eq, ilike, lt, or } from "drizzle-orm";
 import { db, conversations } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 
 /** 按创建时间倒序的游标分页，会话侧栏滚动到底时继续加载。 */
 export async function GET(request: Request) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);

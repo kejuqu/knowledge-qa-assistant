@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, role: "admin", invalidate: vi.fn() }));
+const state = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, canUpload: true, invalidate: vi.fn() }));
 vi.mock("../../../apps/web/node_modules/react", () => ({
   useRef: () => ({ current: 0 }),
   useState: (initial: unknown) => {
@@ -14,7 +14,7 @@ vi.mock("../../../apps/web/node_modules/react", () => ({
 vi.mock("../../../apps/web/node_modules/@tanstack/react-query/build/modern/index.js", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidate }),
 }));
-vi.mock("@/components/tenant-role", () => ({ useTenantRole: () => state.role }));
+vi.mock("@/components/tenant-role", () => ({ usePermission: () => state.canUpload }));
 
 import { useDocumentUpload } from "../../../apps/web/src/components/documents/use-document-upload";
 
@@ -38,7 +38,7 @@ describe("批量文档上传", () => {
   beforeEach(() => {
     state.values = [];
     state.cursor = 0;
-    state.role = "admin";
+    state.canUpload = true;
     requests.length = 0;
     state.invalidate.mockClear();
     vi.stubGlobal("XMLHttpRequest", FakeXHR);
@@ -80,10 +80,10 @@ describe("批量文档上传", () => {
     expect(requests).toHaveLength(1);
   });
 
-  it("非管理员不能发起批量上传", async () => {
-    state.role = "member";
+  it("没有上传权限时不能发起批量上传", async () => {
+    state.canUpload = false;
     await useDocumentUpload().upload([new File(["a"], "a.txt")]);
     expect(requests).toHaveLength(0);
-    expect(state.values[1]).toBe("仅租户管理员可上传知识库文档");
+    expect(state.values[1]).toBe("没有上传知识库文档的权限");
   });
 });

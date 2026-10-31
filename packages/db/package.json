@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
+    "./notifications": "./src/notifications.ts",
     "./client": "./src/client.ts"
   },
   "scripts": {

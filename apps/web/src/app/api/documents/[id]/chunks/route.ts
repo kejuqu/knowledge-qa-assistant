@@ -1,13 +1,13 @@
+import { getTenantUser } from "@/lib/tenant-user";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
-import { getSessionUser } from "@kqa/auth/next";
 import { getDocumentChunks } from "@kqa/ai";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
   const [doc] = await db.select({ status: documents.status, chunkCount: documents.chunkCount })

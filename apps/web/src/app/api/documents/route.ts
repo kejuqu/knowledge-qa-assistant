@@ -1,8 +1,8 @@
+import { hasPermission } from "@kqa/auth/permissions";
 import { NextResponse } from "next/server";
 import { desc, eq, isNull, and, sql } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
 import { getTenantUser } from "@/lib/tenant-user";
-import { getSessionUser } from "@kqa/auth/next";
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from "@kqa/ai";
 import { enqueueDocument } from "@/lib/queue";
 import {
@@ -20,7 +20,7 @@ import { getDocumentMimeType } from "@/lib/utils";
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 export async function GET() {
-  const user = await getSessionUser();
+  const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   // 知识库是租户共享的：列出租户内所有未删除文档
@@ -57,8 +57,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await getTenantUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "仅租户管理员可管理知识库文档" }, { status: 403 });
+  if (!hasPermission(user, "documents.upload")) {
+    return NextResponse.json({ error: "没有上传知识库文档的权限" }, { status: 403 });
   }
 
   const formData = await request.formData();

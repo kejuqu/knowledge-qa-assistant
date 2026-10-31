@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { NOTIFICATION_TYPES, type NotificationBody } from "./notifications";
 import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, uniqueIndex, unique, customType } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Uint8Array }>({
@@ -7,12 +8,14 @@ const bytea = customType<{ data: Uint8Array }>({
   },
 });
 
-/** 用户 —— 由 auth app 写入，web app 只读 */
+/** 用户账号，由认证中心创建 */
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  avatarData: bytea("avatar_data"),
+  avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -20,10 +23,11 @@ export const users = pgTable("users", {
 export const tenants = pgTable("tenants", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  nameKey: text("name_key").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** 租户成员：role 决定能否管理知识库/模型配置 */
+/** pending/rejected 成员不能访问租户数据；permissions=null 时使用角色默认权限。 */
 export const tenantMembers = pgTable(
   "tenant_members",
   {
@@ -31,6 +35,10 @@ export const tenantMembers = pgTable(
     tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
     userId: uuid("user_id").references(() => users.id).notNull(),
     role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+    status: text("status", { enum: ["active", "pending", "rejected"] }).notNull().default("active"),
+    permissions: jsonb("permissions").$type<string[] | null>(),
+    reviewedBy: uuid("reviewed_by").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -38,6 +46,19 @@ export const tenantMembers = pgTable(
     index("tenant_members_user_idx").on(t.userId),
   ]
 );
+
+/** 持久化站内通知：每位接收者拥有独立的已读状态。 */
+export const notifications = pgTable("notifications", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  membershipId: uuid("membership_id").references(() => tenantMembers.id).notNull(),
+  type: text("type", { enum: NOTIFICATION_TYPES }).notNull(),
+  title: text("title").notNull(),
+  body: jsonb("body").$type<NotificationBody>().notNull(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("notifications_recipient_idx").on(t.tenantId, t.userId, t.createdAt)]);
 
 /** 员工上传的知识文档（向量本身存 Milvus，这里存元数据）；归属租户，ownerId 仅记录上传人 */
 export const documents = pgTable(

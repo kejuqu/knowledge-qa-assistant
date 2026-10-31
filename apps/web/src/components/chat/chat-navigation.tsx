@@ -30,7 +30,8 @@ import { TooltipHint } from "@kqa/ui/components/tooltip";
 import { OverflowText } from "@kqa/ui/components/overflow-text";
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import { cn } from "@kqa/ui/lib/utils";
-import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, FileText, MessageSquare, Plus, Settings, MoreVertical, Pin, PinOff, Pencil, Trash2, Users } from "lucide-react";
+import { usePermission } from "@/components/tenant-role";
 import { useChatStore } from "@/stores/chat-store";
 
 interface Conversation {
@@ -47,6 +48,7 @@ interface ConversationPage {
 const NAV = [
   { href: "/documents", label: "知识库", icon: FileText },
   { href: "/settings", label: "模型设置", icon: Settings },
+  { href: "/team", label: "团队管理", icon: Users },
 ];
 
 async function getConversations({ pageParam, search }: { pageParam: string | null; search: string }) {
@@ -331,6 +333,9 @@ function ConversationListSkeleton() {
 
 /** 主导航中的问答分组：展开后显示可滚动、按需加载的会话列表。 */
 export function ChatNavigation() {
+  const canManageSettings = usePermission("settings.manage");
+  const canManageTeam = usePermission("team.manage");
+  const canSetRoles = usePermission("roles.manage");
   const pathname = usePathname();
   const router = useRouter();
   const { collapsed, isMobile, setMobileOpen } = useSidebar();
@@ -416,7 +421,7 @@ export function ChatNavigation() {
         )}
         {!collapsed && expanded && <ConversationList onSelect={selectConversation} />}
       </div>
-      {NAV.map((item) => {
+      {NAV.filter((item) => item.href === "/settings" ? canManageSettings : item.href === "/team" ? canManageTeam || canSetRoles : true).map((item) => {
         const linkClassName = `flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors duration-200 ${
           collapsed ? "justify-center px-2" : ""
         } ${

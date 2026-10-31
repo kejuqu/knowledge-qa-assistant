@@ -43,6 +43,27 @@
       "when": 1793437654102,
       "tag": "0005_fearless_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793452141881,
+      "tag": "0006_foamy_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793453357353,
+      "tag": "0007_workable_black_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793454278922,
+      "tag": "0008_overconfident_jane_foster",
+      "breakpoints": true
     }
   ]
 }
