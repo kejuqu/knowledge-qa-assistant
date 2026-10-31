@@ -78,8 +78,15 @@ function normalizeTables($: cheerio.CheerioAPI) {
  * pdf/txt 抽取结果本身就是合法 Markdown 源，直接用。
  * 解析器按格式插件化，后续 OCR（扫描件 PDF / 图片）在 pdf 分支里加扩展点即可。
  */
-export async function extractText(buffer: Buffer, filename: string): Promise<string> {
-  const ext = getExtension(filename);
+export async function extractText(buffer: Buffer, filename: string, mimeType?: string): Promise<string> {
+  const extensionByMime: Record<string, string> = {
+    "text/plain": "txt",
+    "text/markdown": "md",
+    "text/html": "html",
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  };
+  const ext = (mimeType && extensionByMime[mimeType]) || getExtension(filename);
 
   switch (ext) {
     case "txt":

@@ -102,7 +102,7 @@ export function DocumentCard({ doc, onPreview }: { doc: DocumentItem; onPreview?
   return (
     <Card>
       <CardHeader className="flex-row items-center gap-3 space-y-0 p-4">
-        <button type="button" onClick={onPreview} aria-label={`查看 ${doc.filename}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" onClick={onPreview} disabled={doc.status !== "ready"} title={doc.status !== "ready" ? "文档就绪后可预览" : undefined} aria-label={`查看 ${doc.filename}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none enabled:hover:text-primary disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-ring">
         <FileText className="size-5 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <CardTitle className="truncate text-sm">{doc.filename}</CardTitle>
@@ -191,7 +191,7 @@ export function DocumentCard({ doc, onPreview }: { doc: DocumentItem; onPreview?
 
 export function DocumentList({ docs }: { docs: DocumentItem[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = docs.find((doc) => doc.id === selectedId);
+  const selected = docs.find((doc) => doc.id === selectedId && doc.status === "ready");
   const { data: chunks = [], isPending, error } = useQuery<Array<{ chunkIndex: number; content: string }>>({
     queryKey: ["document-chunks", selected?.id, selected?.status, selected?.chunkCount],
     enabled: !!selected,

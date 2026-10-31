@@ -59,9 +59,9 @@ export function useDocumentUpload() {
 
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          updateTask(id, { progress: 100 });
-          // 上传完成，SSE 会推送 processing -> ready，进度条短暂展示 100% 后消失
-          setTimeout(() => removeTask(id), 800);
+          // 刷新文档列表前移除上传卡片，避免与已入库的文档卡片同时展示。
+          // 后续排队、向量化进度由文档卡片和 SSE 状态更新承接。
+          removeTask(id);
         } else {
           let message = "上传失败";
           try {

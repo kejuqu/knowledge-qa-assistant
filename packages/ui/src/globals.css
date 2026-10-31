@@ -192,6 +192,29 @@ html[data-panel-resizing] body {
   user-select: none;
 }
 
+/* AI 思考中指示器：三点错峰弹跳（transform/opacity only），尊重减弱动效偏好。 */
+.thinking-dot {
+  animation: thinking-bounce 1.2s ease-in-out infinite;
+}
+
+@keyframes thinking-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* 聊天区继承全局主题，输入框使用卡片背景。 */
 .chat-page {
   background: var(--background);

@@ -7,6 +7,7 @@ import { Skeleton } from "@kqa/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kqa/ui/components/tabs";
 import { Download, FileText, X } from "lucide-react";
 import { cn } from "@kqa/ui/lib/utils";
+import { getPreviewType } from "@/lib/utils";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { buildHighlightSegments, injectHighlightsIntoHtml } from "@/lib/highlight";
 
@@ -46,6 +47,21 @@ export function CitationPanel({
     }
     return [...seen.entries()].map(([documentId, filename]) => ({ documentId, filename }));
   }, [citations]);
+  const [floatingWidth, setFloatingWidth] = useState(width);
+  const [resizing, setResizing] = useState(false);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  function resizeFloatingPanel(next: number) {
+    setFloatingWidth(Math.min(1600, window.innerWidth, Math.max(Math.min(360, window.innerWidth), next)));
+  }
+
+  useEffect(() => {
+    if (!resizing) return;
+    document.documentElement.setAttribute("data-panel-resizing", "true");
+    return () => document.documentElement.removeAttribute("data-panel-resizing");
+  }, [resizing]);
+
   const [selectedDocumentId, setSelectedDocumentId] = useState(initialDocumentId);
   // 关闭时先播退出动画，再通知父级卸载
   const [exiting, setExiting] = useState(false);
@@ -85,6 +101,7 @@ export function CitationPanel({
 
   return (
     <aside
+      ref={panelRef}
       role={floating ? "dialog" : undefined}
       aria-modal={floating ? false : undefined}
       aria-label="文档预览"
@@ -97,8 +114,43 @@ export function CitationPanel({
           ? "animate-out fade-out-0 slide-out-to-right-2 duration-200"
           : "animate-in fade-in-0 slide-in-from-right-4 duration-300"
       )}
-      style={{ "--panel-width": `${width}px` } as React.CSSProperties}
+      style={{ "--panel-width": `${floating ? floatingWidth : width}px` } as React.CSSProperties}
     >
+      {floating && (
+        <div
+          role="separator"
+          tabIndex={0}
+          aria-label="调整文档预览宽度"
+          aria-orientation="vertical"
+          aria-valuemin={360}
+          aria-valuemax={1600}
+          aria-valuenow={floatingWidth}
+          className="absolute inset-y-0 left-0 w-2 cursor-col-resize touch-none hover:bg-primary/20 focus-visible:bg-primary/20 focus-visible:outline-none"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            resizeStart.current = { x: event.clientX, width: panelRef.current?.getBoundingClientRect().width ?? floatingWidth };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setResizing(true);
+          }}
+          onPointerMove={(event) => {
+            if (resizeStart.current) resizeFloatingPanel(resizeStart.current.width + resizeStart.current.x - event.clientX);
+          }}
+          onPointerUp={(event) => {
+            resizeStart.current = null;
+            setResizing(false);
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => { resizeStart.current = null; setResizing(false); }}
+          onLostPointerCapture={() => { resizeStart.current = null; setResizing(false); }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+              event.preventDefault();
+              resizeFloatingPanel((panelRef.current?.getBoundingClientRect().width ?? floatingWidth) + (event.key === "ArrowLeft" ? 40 : -40));
+            }
+          }}
+        />
+      )}
       <header className="flex items-center gap-3 px-5 pt-5">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <FileText className="size-4" />
@@ -167,7 +219,7 @@ export function CitationPanel({
           </TabsList>
           <TabsContent value="chunks" className="mt-4 min-h-0 flex-1 overflow-y-auto">
             {loading ? (
-              <p role="status" className="text-sm text-muted-foreground">正在加载分块…</p>
+              <PreviewSkeleton chunks />
             ) : error ? (
               <p role="alert" className="text-sm text-destructive">{error}</p>
             ) : floating && docChunks.every((chunk) => !chunk.content) ? (
@@ -232,9 +284,18 @@ function CitedChunks({ chunks }: { chunks: CitationChunk[] }) {
   );
 }
 
-/** Tab2：原文件预览。docx 走消毒 HTML + sandbox iframe；文本类支持段落高亮。 */
+/** Tab2：原文件预览。HTML/docx 走消毒 HTML + sandbox iframe；文本类支持段落高亮。 */
 function FilePreview({ citation, chunks }: { citation: CitationChunk; chunks: CitationChunk[] }) {
-  const previewType = getPreviewType(citation.filename);
+  const { data: metadata, isPending: metadataLoading, error: metadataError } = useQuery<{ mimeType: string }>({
+    queryKey: ["document-metadata", citation.documentId],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/documents/${encodeURIComponent(citation.documentId)}/content?format=metadata`, { signal });
+      if (!response.ok) throw new Error("无法加载文档类型");
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const previewType = getPreviewType(metadata?.mimeType ?? "");
   const previewUrl = `/api/documents/${encodeURIComponent(citation.documentId)}/content`;
   const needles = useMemo(
     () => chunks.map((chunk) => chunk.content ?? "").filter(Boolean),
@@ -243,12 +304,12 @@ function FilePreview({ citation, chunks }: { citation: CitationChunk; chunks: Ci
 
   const { data: textContent, isLoading, error } = useQuery<string>({
     queryKey: ["document-preview", citation.documentId],
-    queryFn: async () => {
-      const response = await fetch(previewUrl);
+    queryFn: async ({ signal }) => {
+      const response = await fetch(previewUrl, { signal });
       if (!response.ok) throw new Error("无法加载文档内容");
       return response.text();
     },
-    enabled: previewType === "markdown" || previewType === "text",
+    enabled: !!metadata && (previewType === "markdown" || previewType === "text"),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -262,35 +323,19 @@ function FilePreview({ citation, chunks }: { citation: CitationChunk; chunks: Ci
     container?.querySelector("mark")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [previewType, textContent]);
 
+  if (metadataLoading) return <PreviewSkeleton />;
+  if (metadataError) return <p role="alert" className="text-sm text-destructive">文档类型加载失败，请关闭后重试。</p>;
+
   if (previewType === "pdf") {
-    return (
-      <iframe className="h-full min-h-[70dvh] w-full rounded-md border border-border" src={previewUrl} title={citation.filename} />
-    );
+    return <PreviewFrame src={previewUrl} title={citation.filename} />;
   }
 
-  if (previewType === "html") {
-    return (
-      <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 text-center">
-        <FileText className="size-8 text-muted-foreground" />
-        <p className="font-medium">HTML 文件不在页面内直接运行</p>
-        <p className="max-w-md text-sm text-muted-foreground">为避免文档脚本访问当前登录会话，请下载后在本地查看。</p>
-      </div>
-    );
-  }
-
-  if (previewType === "docx") {
-    return <DocxPreview citation={citation} needles={needles} />;
+  if (previewType === "html" || previewType === "docx") {
+    return <HtmlPreview citation={citation} needles={needles} allowHighlightScroll={previewType === "docx"} />;
   }
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3" aria-label="正在加载文档预览" role="status">
-        <Skeleton className="h-5 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-4/5" />
-      </div>
-    );
+    return <PreviewSkeleton />;
   }
 
   if (error || textContent === undefined) {
@@ -340,16 +385,17 @@ function FilePreview({ citation, chunks }: { citation: CitationChunk; chunks: Ci
 }
 
 /**
- * docx 预览：服务端已做 mammoth 转 HTML + 白名单消毒 + CSP。
+ * HTML/docx 预览：服务端白名单消毒 + CSP；HTML 的 sandbox 不放行脚本。
+ * docx 额外转换为 HTML。
  * 前端再注入 <mark> 高亮与滚动脚本，放进 sandbox iframe（无同源、无 cookie、
  * 脚本在隔离源里运行，拿不到父页面任何数据）。图片仅 data URI，无外部请求。
  */
-function DocxPreview({ citation, needles }: { citation: CitationChunk; needles: string[] }) {
+function HtmlPreview({ citation, needles, allowHighlightScroll }: { citation: CitationChunk; needles: string[]; allowHighlightScroll: boolean }) {
   const { data: html, isLoading, error } = useQuery<string>({
-    queryKey: ["docx-preview", citation.documentId],
-    queryFn: async () => {
+    queryKey: ["html-preview", citation.documentId],
+    queryFn: async ({ signal }) => {
       const response = await fetch(
-        `/api/documents/${encodeURIComponent(citation.documentId)}/content?format=html`
+        `/api/documents/${encodeURIComponent(citation.documentId)}/content?format=html`, { signal }
       );
       if (!response.ok) throw new Error("无法生成文档预览");
       return response.text();
@@ -360,18 +406,11 @@ function DocxPreview({ citation, needles }: { citation: CitationChunk; needles: 
   const srcDoc = useMemo(() => {
     if (html === undefined) return "";
     const withMarks = injectHighlightsIntoHtml(html, needles);
-    return withMarks.replace("</body>", `${DOCX_SCROLL_SCRIPT}</body>`);
-  }, [html, needles]);
+    return allowHighlightScroll ? withMarks.replace("</body>", `${DOCX_SCROLL_SCRIPT}</body>`) : withMarks;
+  }, [html, needles, allowHighlightScroll]);
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3" aria-label="正在生成文档预览" role="status">
-        <Skeleton className="h-5 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-4/5" />
-      </div>
-    );
+    return <PreviewSkeleton />;
   }
 
   if (error || srcDoc === "") {
@@ -379,23 +418,48 @@ function DocxPreview({ citation, needles }: { citation: CitationChunk; needles: 
   }
 
   return (
-    <iframe
-      sandbox="allow-scripts"
-      className="h-full min-h-[70dvh] w-full rounded-md border border-border bg-white"
-      srcDoc={srcDoc}
-      title={citation.filename}
-    />
+    <PreviewFrame sandbox={allowHighlightScroll ? "allow-scripts" : ""} srcDoc={srcDoc} title={citation.filename} />
   );
 }
 
 /** 在 sandbox iframe 内部滚动到第一处高亮（父页面因 sandbox 无法访问其 DOM）。 */
 const DOCX_SCROLL_SCRIPT = `<script>window.addEventListener("load",function(){setTimeout(function(){var m=document.querySelector("mark");if(m)m.scrollIntoView({block:"center"})},50)})</script>`;
 
-function getPreviewType(filename: string): "pdf" | "markdown" | "html" | "docx" | "text" {
-  if (/\.pdf$/i.test(filename)) return "pdf";
-  if (/\.(md|markdown)$/i.test(filename)) return "markdown";
-  if (/\.html?$/i.test(filename)) return "html";
-  if (/\.docx$/i.test(filename)) return "docx";
-  return "text";
+
+
+
+/** 同时覆盖请求加载和 iframe 实际渲染阶段。 */
+function PreviewFrame(props: React.IframeHTMLAttributes<HTMLIFrameElement>) {
+  const [loadedSource, setLoadedSource] = useState<string>();
+  const source = props.srcDoc ?? props.src;
+  const loading = loadedSource !== source;
+  return (
+    <div className="relative h-full min-h-[70dvh]">
+      {loading && <div className="absolute inset-0 bg-background"><PreviewSkeleton /></div>}
+      <iframe
+        {...props}
+        key={source}
+        referrerPolicy="no-referrer"
+        aria-busy={loading}
+        className={cn("h-full min-h-[70dvh] w-full rounded-md border border-border bg-white", loading && "invisible")}
+        onLoad={() => setLoadedSource(source)}
+      />
+    </div>
+  );
 }
 
+function PreviewSkeleton({ chunks = false }: { chunks?: boolean }) {
+  return (
+    <div role="status" aria-label={chunks ? "正在加载分块" : "正在加载原文"} className="flex flex-col gap-4">
+      {Array.from({ length: chunks ? 3 : 1 }, (_, index) => (
+        <div key={index} className={cn("flex flex-col gap-3", chunks && "rounded-xl bg-muted/40 p-4")}>
+          <Skeleton className={chunks ? "h-5 w-16" : "h-6 w-2/3"} />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+      ))}
+    </div>
+  );
+}

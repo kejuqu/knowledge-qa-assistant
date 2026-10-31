@@ -9,6 +9,7 @@ import { convertDocxToHtml } from "./parsers";
 const PREVIEW_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p", "br", "hr",
+    "div", "span", "section", "article", "header", "footer", "main", "dl", "dt", "dd",
     "h1", "h2", "h3", "h4", "h5", "h6",
     "ul", "ol", "li",
     "blockquote", "pre", "code",
@@ -31,7 +32,7 @@ const PREVIEW_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
  * CSP 双保险：即使消毒有遗漏，iframe 内也无法发起请求或执行脚本。
  * style 仅限行内，配合下方基础排版样式使用。
  */
-const PREVIEW_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'";
+const PREVIEW_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
 /** 供 HTTP 响应头使用的同款 CSP（iframe srcdoc 场景由 meta 生效）。 */
 export const DOCX_PREVIEW_CSP = PREVIEW_CSP;
@@ -53,6 +54,11 @@ const PREVIEW_STYLES = `
  */
 export async function renderDocxPreviewHtml(buffer: Buffer): Promise<string> {
   const raw = await convertDocxToHtml(buffer);
+  return renderSafePreviewHtml(raw);
+}
+
+/** HTML 原文与 docx 共用白名单清理、CSP 和基础排版。 */
+export function renderSafePreviewHtml(raw: string): string {
   const body = sanitizeHtml(raw, PREVIEW_SANITIZE_OPTIONS);
   return [
     "<!doctype html>",

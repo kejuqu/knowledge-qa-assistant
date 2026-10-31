@@ -31,3 +31,5 @@ export function formatMessageTime(iso: string) {
   const hm = date.format("HH:mm");
   return date.year() === now.year() ? `${md} ${hm}` : `${date.year()}年${md} ${hm}`;
 }
+
+export { getDocumentMimeType, getPreviewType, type DocumentPreviewType } from "./utils/document";

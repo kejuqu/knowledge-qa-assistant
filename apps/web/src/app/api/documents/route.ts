@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { desc, eq, isNull, and } from "drizzle-orm";
+import { desc, eq, isNull, and, sql } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
 import { getTenantUser } from "@/lib/tenant-user";
 import { getSessionUser } from "@kqa/auth/next";
@@ -10,7 +10,11 @@ import {
   createDocumentObjectUrl,
   deleteDocumentObject,
   uploadDocumentObject,
+  readDocumentObject,
 } from "@/lib/object-storage";
+
+import { documentSha256 } from "@/lib/document-file";
+import { getDocumentMimeType } from "@/lib/utils";
 
 // 输入安全：单文件上限 20MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -24,6 +28,7 @@ export async function GET() {
     .select({
       id: documents.id,
       filename: documents.filename,
+      mimeType: documents.mimeType,
       sizeBytes: documents.sizeBytes,
       chunkCount: documents.chunkCount,
       status: documents.status,
@@ -74,9 +79,28 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  const sha256 = documentSha256(buffer);
+  const mimeType = getDocumentMimeType(file.name, file.type);
+  const duplicateResponse = () => NextResponse.json({ error: "文件已经上传" }, { status: 409 });
+  const [existing] = await db.select({ id: documents.id }).from(documents).where(and(
+    eq(documents.tenantId, user.tenantId), eq(documents.sha256, sha256), isNull(documents.deletedAt)
+  )).limit(1);
+  if (existing) return duplicateResponse();
+
+  // 旧文档没有哈希：仅读取同租户、同字节数的候选原文件，避免全量扫描对象存储。
+  const legacy = await db.select({ objectKey: documents.objectKey, fileData: documents.fileData })
+    .from(documents).where(and(
+      eq(documents.tenantId, user.tenantId), eq(documents.sizeBytes, file.size),
+      isNull(documents.sha256), isNull(documents.deletedAt)
+    ));
+  for (const candidate of legacy) {
+    const body = candidate.objectKey ? await readDocumentObject(candidate.objectKey) : candidate.fileData;
+    if (body && documentSha256(body) === sha256) return duplicateResponse();
+  }
+
   let text: string;
   try {
-    text = await extractText(buffer, file.name);
+    text = await extractText(buffer, file.name, mimeType);
   } catch (err) {
     const message = err instanceof Error ? err.message : "parse failed";
     return NextResponse.json({ error: `文档解析失败：${message}` }, { status: 422 });
@@ -89,7 +113,6 @@ export async function POST(request: Request) {
   }
 
   const documentId = crypto.randomUUID();
-  const mimeType = file.type || "application/octet-stream";
   const objectKey = createDocumentObjectKey(user.tenantId, documentId, file.name);
 
   try {
@@ -99,7 +122,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "文件存储失败，请稍后重试" }, { status: 502 });
   }
 
-  let doc: typeof documents.$inferSelect;
+  let doc: typeof documents.$inferSelect | undefined;
   try {
     [doc] = await db
       .insert(documents)
@@ -109,16 +132,26 @@ export async function POST(request: Request) {
         ownerId: user.sub,
         filename: file.name,
         mimeType,
+        sha256,
         sizeBytes: file.size,
         status: "pending",
         sourceText: text,
         objectKey,
         objectUrl: createDocumentObjectUrl(objectKey),
       })
+      .onConflictDoNothing({
+        target: [documents.tenantId, documents.sha256],
+        where: sql`${documents.deletedAt} is null`,
+      })
       .returning();
   } catch (error) {
     await deleteDocumentObject(objectKey).catch(() => undefined);
     throw error;
+  }
+
+  if (!doc) {
+    await deleteDocumentObject(objectKey).catch(() => undefined);
+    return duplicateResponse();
   }
 
   // 解析入库成功即响应；向量化交给后台队列，状态通过 SSE 推送

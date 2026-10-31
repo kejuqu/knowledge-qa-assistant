@@ -36,6 +36,13 @@
       "when": 1793352304525,
       "tag": "0004_pretty_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793437654102,
+      "tag": "0005_fearless_young_avengers",
+      "breakpoints": true
     }
   ]
 }

@@ -273,7 +273,8 @@ function ChatContent() {
           >
             <MessageScroller.Content className="mx-auto flex w-full max-w-3xl flex-col gap-7" aria-busy={streaming}>
               {historyError && <p role="alert" className="text-center text-sm text-destructive">无法加载对话，可能已被删除或暂时不可用。</p>}
-              {isHistoryLoading && (
+              {/* 骨架屏只在没有其他内容可展示时出现，避免新会话首条消息回复期间闪烁 */}
+              {isHistoryLoading && !hasVisibleMessages && !streaming && (
                 <MessageScroller.Item messageId="history-loading">
                   <ChatHistorySkeleton />
                 </MessageScroller.Item>
@@ -305,10 +306,12 @@ function ChatContent() {
               ))}
               {streaming && (
                 <MessageScroller.Item messageId="live-answer">
-                  <MessageBubble
-                    message={{ id: "live", role: "assistant", content: liveAnswer || "正在思考…" }}
-                    onPreviewCitations={openCitationPanel}
-                  />
+                  <div className="animate-in fade-in-0 duration-300">
+                    <MessageBubble
+                      message={{ id: "live", role: "assistant", content: liveAnswer }}
+                      onPreviewCitations={openCitationPanel}
+                    />
+                  </div>
                 </MessageScroller.Item>
               )}
               {sendError && (
@@ -524,7 +527,13 @@ function MessageBubble({
               : "rounded-tl-md bg-card text-foreground"
           }`}
         >
-          {isUser ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : <MessageMarkdown content={message.content} />}
+          {isUser ? (
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : message.content ? (
+            <MessageMarkdown content={message.content} />
+          ) : (
+            <ThinkingIndicator />
+          )}
           {message.citations && message.citations.length > 0 && (
             <CitationPreview citations={message.citations} onSelect={onPreviewCitations} />
           )}
@@ -556,6 +565,21 @@ function MessageBubble({
 }
 
 /** 消息气泡里的引用来源列表：点击后在右侧预览面板打开对应文档。 */
+/** AI 思考中指示器：三点错峰弹跳，动画只动 transform/opacity，尊重减弱动效偏好。 */
+function ThinkingIndicator() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1.5" role="status" aria-label="正在思考">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="thinking-dot size-1.5 rounded-full bg-foreground/70"
+          style={{ animationDelay: `${i * 180}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function CitationPreview({
   citations,
   onSelect,

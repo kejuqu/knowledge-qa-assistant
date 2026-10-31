@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, unique, customType } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, index, uniqueIndex, unique, customType } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Uint8Array }>({
   dataType() {
@@ -47,6 +48,8 @@ export const documents = pgTable(
     ownerId: uuid("owner_id").references(() => users.id).notNull(),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
+    /** 原始文件字节的 SHA-256；旧文档允许为空。 */
+    sha256: text("sha256"),
     sizeBytes: integer("size_bytes").notNull(),
     chunkCount: integer("chunk_count").notNull().default(0),
     status: text("status", { enum: ["pending", "processing", "ready", "failed"] })
@@ -64,7 +67,12 @@ export const documents = pgTable(
     /** 软删除：有值表示已删除，列表查询默认过滤掉 */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("documents_tenant_idx").on(t.tenantId)]
+  (t) => [
+    index("documents_tenant_idx").on(t.tenantId),
+    uniqueIndex("documents_tenant_sha256_active_uniq")
+      .on(t.tenantId, t.sha256)
+      .where(sql`${t.deletedAt} is null`),
+  ]
 );
 
 /** 问答会话 */
