@@ -26,8 +26,8 @@ export default async function MainLayout({ children }: { children: React.ReactNo
 
   return (
     <TenantRoleProvider role={user.role} permissions={user.permissions}>
-      <SidebarProvider className="app-shell">
-        <Sidebar className="p-3.5">
+      <SidebarProvider className="app-shell h-dvh min-h-0 overflow-hidden">
+        <Sidebar className="h-dvh p-3.5">
           <SidebarHeader className="mb-6">
             <div className="mb-1 flex items-center gap-2.5 group-data-[state=collapsed]/sidebar:justify-center">
               <div data-sidebar-label className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
@@ -52,7 +52,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
         </Sidebar>
         <SidebarMobileOverlay />
         <SidebarMobileTrigger />
-        <main className="min-w-0 flex-1 pt-16 md:pt-0">{children}</main>
+        <main id="main-content" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pt-16 md:pt-0">{children}</main>
       </SidebarProvider>
     </TenantRoleProvider>
   );

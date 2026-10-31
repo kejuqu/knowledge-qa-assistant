@@ -31,6 +31,16 @@ describe("JWT proxy", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "unauthorized" });
   });
+  it("仅员工导入 POST 的 Bearer 请求交由路由鉴权", async () => {
+    const bearer = { authorization: "Bearer invalid" };
+    const allowed = await proxy(new NextRequest("http://app.lvh.me:3100/api/team/import", { method: "POST", headers: bearer }));
+    expect(allowed.headers.get("x-middleware-next")).toBe("1");
+    for (const path of ["/api/team/api-keys", "/api/team", "/api/documents", "/api/team/import/template"]) {
+      expect((await proxy(new NextRequest(`http://app.lvh.me:3100${path}`, { method: "POST", headers: bearer }))).status).toBe(401);
+    }
+    expect((await proxy(new NextRequest("http://app.lvh.me:3100/api/team/import", { headers: bearer }))).status).toBe(401);
+    expect((await proxy(new NextRequest("http://app.lvh.me:3100/api/team/import", { method: "POST" }))).status).toBe(401);
+  });
   it("rejects expired JWTs", async () => {
     expect((await proxy(request("/api/conversations", `kqa_session=${expired}`))).status).toBe(401);
   });

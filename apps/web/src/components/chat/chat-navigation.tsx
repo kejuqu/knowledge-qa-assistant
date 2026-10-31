@@ -245,7 +245,7 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => setConversationToRename(null)}>取消</Button>
-            <Button type="submit" className="text-white" disabled={busy || streaming || !renameTitle.trim()}>{busy ? "重命名中…" : "重命名"}</Button>
+            <Button type="submit" disabled={busy || streaming || !renameTitle.trim()}>{busy ? "重命名中…" : "重命名"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

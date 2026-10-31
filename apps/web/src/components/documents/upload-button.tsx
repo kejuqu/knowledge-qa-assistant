@@ -15,7 +15,7 @@ export function UploadButton({ onSelect }: UploadButtonProps) {
 
   return (
     <>
-      <Button onClick={() => inputRef.current?.click()} className="w-full shrink-0 text-white sm:w-auto">
+      <Button onClick={() => inputRef.current?.click()} className="w-full shrink-0 sm:w-auto">
         <Upload />
         上传文档
       </Button>

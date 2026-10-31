@@ -47,6 +47,20 @@ export const tenantMembers = pgTable(
   ]
 );
 
+/** 员工导入专用密钥：仅存 SHA-256，原文只在创建时返回。 */
+export const tenantApiKeys = pgTable("tenant_api_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [index("tenant_api_keys_tenant_idx").on(t.tenantId)]);
+
 /** 持久化站内通知：每位接收者拥有独立的已读状态。 */
 export const notifications = pgTable("notifications", {
   id: uuid("id").defaultRandom().primaryKey(),

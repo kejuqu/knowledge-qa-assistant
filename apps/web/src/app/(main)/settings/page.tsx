@@ -123,7 +123,7 @@ export default function SettingsPage() {
               onClick={save}
               disabled={saving || !canManage}
               size="lg"
-              className="w-full text-white sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : saved ? <Check data-icon="inline-start" /> : <Save data-icon="inline-start" />}
               {saving ? "保存中…" : saved ? "已保存" : "保存配置"}

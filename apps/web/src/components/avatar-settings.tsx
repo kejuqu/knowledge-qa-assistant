@@ -68,7 +68,7 @@ export function AvatarSettings({ open, onOpenChange, profile }: { open: boolean;
           {profile.avatarUrl && <Button type="button" variant="ghost" disabled={busy} onClick={() => void save(true)}><Trash2 />移除头像</Button>}
           <div className="flex justify-end gap-2 sm:ml-auto">
             <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>取消</Button>
-            <Button type="submit" className="text-white" disabled={busy || !file}>{busy && <Loader2 className="animate-spin" />}保存头像</Button>
+            <Button type="submit" disabled={busy || !file}>{busy && <Loader2 className="animate-spin" />}保存头像</Button>
           </div>
         </DialogFooter>
       </form>

@@ -3,6 +3,10 @@ import { SESSION_COOKIE, verifySession } from "@kqa/auth/session";
 
 /** 统一入口校验；路由/数据访问层仍独立验证身份和资源权限。 */
 export async function proxy(request: NextRequest) {
+  // 仅此导入端点允许由路由独立校验 Bearer Key；密钥不能访问其他 API。
+  if (request.method === "POST" && request.nextUrl.pathname === "/api/team/import"
+    && request.headers.has("authorization")) return NextResponse.next();
+
   // RequestCookies 会按名称合并 Cookie，直接读取原始头才能识别同名会话。
   const tokens = (request.headers.get("cookie") ?? "")
     .split(";")

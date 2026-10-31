@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Skeleton } from "@kqa/ui/components/skeleton";
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from "@kqa/ui/components/empty";
 import { UserRoundCheck } from "lucide-react";
+import { TeamQuickNavigation } from "./team-quick-navigation";
+import { TeamImportManagement } from "./team-import-management";
 import { UserAvatar } from "./user-avatar";
 import { PERMISSIONS, effectivePermissions, type Permission, type TenantRole, type MembershipStatus } from "@kqa/auth/permissions";
 import { usePermission, useTenantAccess } from "./tenant-role";
@@ -75,11 +77,13 @@ export function TeamManagement() {
   const available = effectivePermissions(actor);
 
   return (
-    <div className="p-6">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="team-page p-4 md:p-6">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,48rem)_minmax(11rem,1fr)] lg:gap-8">
+      <TeamQuickNavigation canManage={canManage} ready={!isPending && !!data} />
+      <div className="flex min-w-0 flex-col gap-6 lg:col-start-2 lg:row-start-1">
         <div><h1 className="text-xl font-semibold">团队管理</h1><p className="mt-1 text-sm text-muted-foreground">{data?.tenantName} · 审批加入申请，管理成员角色与操作权限</p></div>
         {(loadError || (error && !editing)) && <p role="alert" className="text-sm text-destructive">{loadError?.message ?? error}</p>}
-        <Card id="join-requests" className="scroll-mt-6">
+        <Card id="join-requests" className="team-section scroll-mt-52 lg:scroll-mt-6" tabIndex={-1}>
           <CardHeader><CardTitle>加入申请 · {pending.length}</CardTitle><CardDescription>通过审批后，成员才可访问团队知识库。</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-4">
             {!pending.length && <Empty className="empty-state relative overflow-hidden border border-theme-border/70 bg-gradient-to-b from-primary/[0.06] via-muted/40 to-transparent py-10 md:py-12">
@@ -103,7 +107,7 @@ export function TeamManagement() {
             </div>)}
           </CardContent>
         </Card>
-        <Card>
+        <Card id="team-members" className="team-section scroll-mt-52 lg:scroll-mt-6" tabIndex={-1}>
           <CardHeader><CardTitle>团队成员 · {active.length}</CardTitle><CardDescription>管理员默认拥有全部权限，也可通过勾选自定义权限。</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-5">
             {active.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-3">
@@ -116,7 +120,9 @@ export function TeamManagement() {
             </div>)}
           </CardContent>
         </Card>
+        {canManage && <TeamImportManagement />}
         {rejected.length > 0 && <p className="text-xs text-muted-foreground">已拒绝 {rejected.length} 个加入申请</p>}
+      </div>
       </div>
       <Dialog open={!!editing} onOpenChange={(open) => { if (!open && !busy) setEditing(null); }}>
         <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg" showCloseButton={!busy}>
@@ -163,7 +169,7 @@ export function TeamManagement() {
             <DialogFooter className="shrink-0 border-t px-6 py-4">
               {editing?.status === "pending" && <Button type="button" variant="destructive" disabled={busy} onClick={() => void update(editing, "reject")}>拒绝申请</Button>}
               <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>取消</Button>
-              <Button type="submit" className="text-white" disabled={busy}>{busy ? "处理中…" : editing?.status === "pending" ? "批准加入" : "保存权限"}</Button>
+              <Button type="submit" disabled={busy}>{busy ? "处理中…" : editing?.status === "pending" ? "批准加入" : "保存权限"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
