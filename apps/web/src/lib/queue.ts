@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, documents } from "@kqa/db";
 import { ingestDocument } from "@kqa/ai";
 import { getModelConfigForTenant } from "@/lib/model-config";
@@ -40,8 +40,14 @@ async function processItem(item: QueuedDocument) {
     const [doc] = await db
       .update(documents)
       .set({ status: "processing" })
-      .where(eq(documents.id, item.documentId))
+      .where(and(
+        eq(documents.id, item.documentId),
+        eq(documents.tenantId, item.tenantId),
+        eq(documents.status, "pending"),
+        isNull(documents.deletedAt),
+      ))
       .returning();
+    if (!doc) return;
     if (doc) {
       publish(item.tenantId, "document", {
         id: doc.id,

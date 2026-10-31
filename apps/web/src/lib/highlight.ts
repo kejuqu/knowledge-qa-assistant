@@ -44,6 +44,25 @@ function toOriginalRange(
 }
 
 /**
+ * 召回段落可能带注入的"【章节：…】"上下文前缀（原文中不存在），
+ * 匹配时先整段找，找不到就剥掉该前缀再试；通用短首段也做同样尝试。
+ */
+function needleCandidates(raw: string): string[] {
+  const candidates = [raw];
+  const injectedPrefix = /^【章节：[^】]*】\n\s*\n/;
+  const stripped = injectedPrefix.exec(raw);
+  if (stripped) {
+    candidates.push(raw.slice(stripped[0].length));
+  } else {
+    const blankLine = /\n\s*\n/.exec(raw);
+    if (blankLine && blankLine.index < 40) {
+      candidates.push(raw.slice(blankLine.index + blankLine[0].length));
+    }
+  }
+  return candidates;
+}
+
+/**
  * 在 source 中定位 needles（空白归一化匹配），返回可直接渲染的分段。
  * 未命中任何 needle 时返回 [{ text: source, highlight: false }]。
  */
@@ -54,23 +73,26 @@ export function buildHighlightSegments(source: string, needles: string[]): Highl
   const ranges: Array<[number, number]> = [];
   for (const raw of needles) {
     if (!raw) continue;
-    const needle = raw.replace(/\s+/g, "");
-    if (needle.length < MIN_NEEDLE_LENGTH) continue;
-
-    let matched = needle;
-    let from = text.indexOf(matched);
-    if (from === -1) {
-      // 长段落跨 chunk 边界被截断时，退化为匹配前 80 字
-      matched = matched.slice(0, 80);
+    for (const candidate of needleCandidates(raw)) {
+      let matched = candidate.replace(/\s+/g, "");
       if (matched.length < MIN_NEEDLE_LENGTH) continue;
-      from = text.indexOf(matched);
-    }
 
-    let count = 0;
-    while (from !== -1 && count < MAX_MATCHES_PER_NEEDLE) {
-      ranges.push([from, from + matched.length]);
-      count += 1;
-      from = text.indexOf(matched, from + matched.length);
+      let from = text.indexOf(matched);
+      if (from === -1) {
+        // 长段落跨 chunk 边界被截断时，退化为匹配前 80 字
+        matched = matched.slice(0, 80);
+        if (matched.length < MIN_NEEDLE_LENGTH) continue;
+        from = text.indexOf(matched);
+      }
+      if (from === -1) continue;
+
+      let count = 0;
+      while (from !== -1 && count < MAX_MATCHES_PER_NEEDLE) {
+        ranges.push([from, from + matched.length]);
+        count += 1;
+        from = text.indexOf(matched, from + matched.length);
+      }
+      break; // 该 needle 已命中，不再尝试其他候选
     }
   }
 

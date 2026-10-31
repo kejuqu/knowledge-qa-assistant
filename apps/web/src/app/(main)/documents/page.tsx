@@ -34,7 +34,7 @@ export default function DocumentsPage() {
           {isAdmin && docs.length > 0 && <UploadButton onSelect={upload} />}
         </div>
 
-        {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="mb-4 whitespace-pre-line text-sm text-destructive">{error}</p>}
 
         <UploadProgressList tasks={tasks} />
 

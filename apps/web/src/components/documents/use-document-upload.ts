@@ -32,15 +32,10 @@ export function useDocumentUpload() {
    * 上传文件：XMLHttpRequest 才能拿到上传进度，fetch 目前不支持。
    * 进度分两段：0-90% 是浏览器到服务端的上传，90-100% 留给服务端解析入库。
    */
-  async function upload(file: File) {
-    if (!isAdmin) {
-      setError("仅租户管理员可上传知识库文档");
-      return;
+  async function uploadFile(file: File, id: string) {
+    function reportError(message: string) {
+      setError((previous) => [previous, `${file.name}：${message}`].filter(Boolean).join("\n"));
     }
-    setError("");
-    const id = `up-${++seq.current}`;
-    setTasks((prev) => [...prev, { id, name: file.name, progress: 0 }]);
-
     const formData = new FormData();
     formData.append("file", file);
 
@@ -67,20 +62,20 @@ export function useDocumentUpload() {
           try {
             message = JSON.parse(xhr.responseText).error ?? message;
           } catch {}
-          setError(message);
+          reportError(message);
           removeTask(id);
         }
         resolve();
       };
 
       xhr.onerror = () => {
-        setError("网络错误，上传失败");
+        reportError("网络错误，上传失败");
         removeTask(id);
         resolve();
       };
 
       xhr.ontimeout = () => {
-        setError("上传超时，请检查网络后重试");
+        reportError("上传超时，请检查网络后重试");
         removeTask(id);
         resolve();
       };
@@ -89,6 +84,23 @@ export function useDocumentUpload() {
     });
 
     queryClient.invalidateQueries({ queryKey: ["documents"] });
+  }
+
+  async function upload(selection: File | File[]) {
+    if (!isAdmin) {
+      setError("仅租户管理员可上传知识库文档");
+      return;
+    }
+    const files = Array.isArray(selection) ? selection : [selection];
+    if (!files.length) return;
+    setError("");
+    const batch = files.map((file) => ({ file, id: `up-${++seq.current}` }));
+    setTasks((previous) => [
+      ...previous,
+      ...batch.map(({ file, id }) => ({ id, name: file.name, progress: 0 })),
+    ]);
+    // 逐个传输，避免一次选择大量文件时耗尽连接与服务端解析内存。
+    for (const { file, id } of batch) await uploadFile(file, id);
   }
 
   return { upload, tasks, error };

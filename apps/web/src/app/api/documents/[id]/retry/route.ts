@@ -21,33 +21,38 @@ export async function POST(
   }
 
   const { id } = await params;
-  const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
-  if (!doc || doc.tenantId !== user.tenantId) {
-    return NextResponse.json({ error: "文档不存在" }, { status: 404 });
-  }
-  if (doc.status !== "failed") {
-    return NextResponse.json({ error: "只有失败的文档可以重新解析" }, { status: 409 });
-  }
-  if (!doc.sourceText?.trim()) {
-    return NextResponse.json(
-      { error: "该历史文档未保存解析文本，请删除后重新上传" },
-      { status: 409 }
-    );
-  }
+  const result = await db.transaction(async (tx) => {
+    const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1).for("update");
+    if (!doc || doc.tenantId !== user.tenantId || doc.deletedAt) {
+      return NextResponse.json({ error: "文档不存在" }, { status: 404 });
+    }
+    if (doc.status !== "failed") {
+      return NextResponse.json({ error: "只有失败的文档可以重新解析" }, { status: 409 });
+    }
+    if (!doc.sourceText?.trim()) {
+      return NextResponse.json(
+        { error: "该历史文档未保存解析文本，请删除后重新上传" },
+        { status: 409 }
+      );
+    }
 
-  // 上次失败可能已写入部分向量；先清理，防止重试后的检索结果重复。
-  try {
-    await deleteDocumentVectors(doc.id);
-  } catch (err) {
-    console.error(`[retry] failed to remove vectors for ${doc.id}:`, err);
-    return NextResponse.json({ error: "清理上次解析结果失败，请稍后重试" }, { status: 502 });
-  }
+    // 上次失败可能已写入部分向量；先清理，防止重试后的检索结果重复。
+    try {
+      await deleteDocumentVectors(doc.id);
+    } catch (err) {
+      console.error(`[retry] failed to remove vectors for ${doc.id}:`, err);
+      return NextResponse.json({ error: "清理上次解析结果失败，请稍后重试" }, { status: 502 });
+    }
 
-  const [updated] = await db
-    .update(documents)
-    .set({ status: "pending", chunkCount: 0, error: null })
-    .where(eq(documents.id, doc.id))
-    .returning();
+    const [updated] = await tx
+      .update(documents)
+      .set({ status: "pending", chunkCount: 0, error: null })
+      .where(eq(documents.id, doc.id))
+      .returning();
+    return updated;
+  });
+  if (result instanceof NextResponse) return result;
+  const updated = result;
 
   await publish(updated.tenantId, "document", {
     id: updated.id,

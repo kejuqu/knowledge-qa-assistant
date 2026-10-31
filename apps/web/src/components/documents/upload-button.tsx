@@ -6,7 +6,7 @@ import { Upload } from "lucide-react";
 import { ACCEPT_STRING } from "./use-document-upload";
 
 interface UploadButtonProps {
-  onSelect: (file: File) => void;
+  onSelect: (files: File[]) => void;
 }
 
 /** 顶部工具栏的上传按钮：内部封装隐藏 file input（进度条由 UploadProgressList 单独渲染） */
@@ -22,11 +22,12 @@ export function UploadButton({ onSelect }: UploadButtonProps) {
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept={ACCEPT_STRING}
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onSelect(file);
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) onSelect(files);
           e.target.value = "";
         }}
       />

@@ -23,40 +23,42 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
-  if (!doc || doc.tenantId !== user.tenantId) {
-    return NextResponse.json({ error: "文档不存在" }, { status: 404 });
-  }
-  if (doc.status === "processing" || doc.status === "pending") {
-    return NextResponse.json(
-      { error: "文档正在处理中，暂时无法删除，请稍后再试" },
-      { status: 409 }
-    );
-  }
-
-  // 1. 清 Milvus 向量（失败也继续软删除，向量残留不影响功能）
-  try {
-    if (doc.chunkCount > 0) {
-      await deleteDocumentVectors(doc.id);
+  const response = await db.transaction(async (tx) => {
+    // 与重试共用行锁，防止清理向量后又被重新入队写入。
+    const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1).for("update");
+    if (!doc || doc.tenantId !== user.tenantId) {
+      return NextResponse.json({ error: "文档不存在" }, { status: 404 });
     }
-  } catch (err) {
-    console.error(`[delete] failed to remove vectors for ${doc.id}:`, err);
-  }
+    if (doc.status === "processing" || doc.status === "pending") {
+      return NextResponse.json(
+        { error: "文档正在处理中，暂时无法删除，请稍后再试" },
+        { status: 409 }
+      );
+    }
 
-  try {
-    if (doc.objectKey) await deleteDocumentObject(doc.objectKey);
-  } catch (err) {
-    console.error(`[delete] failed to remove object for ${doc.id}:`, err);
-  }
+    // 1. 必须先清理向量；失败的任务也可能已写入部分分块，不能依赖 chunkCount。
+    try {
+      await deleteDocumentVectors(doc.id);
+    } catch (err) {
+      console.error(`[delete] failed to remove vectors for ${doc.id}:`, err);
+      return NextResponse.json({ error: "向量数据清理失败，文档尚未删除，请稍后重试" }, { status: 502 });
+    }
 
-  // 2. 软删除 PG 记录
-  await db
-    .update(documents)
-    .set({ deletedAt: new Date() })
-    .where(eq(documents.id, doc.id));
+    try {
+      if (doc.objectKey) await deleteDocumentObject(doc.objectKey);
+    } catch (err) {
+      console.error(`[delete] failed to remove object for ${doc.id}:`, err);
+    }
 
-  // 3. 推送 SSE 通知前端移除
-  publish(user.tenantId, "document:deleted", { id: doc.id });
+    // 2. 软删除 PG 记录
+    await tx
+      .update(documents)
+      .set({ deletedAt: new Date() })
+      .where(eq(documents.id, doc.id));
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
+  });
+  // 事务提交成功后再通知前端移除。
+  if (response.ok) publish(user.tenantId, "document:deleted", { id });
+  return response;
 }

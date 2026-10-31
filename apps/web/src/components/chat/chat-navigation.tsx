@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@kqa/ui/components/button";
+import { Input } from "@kqa/ui/components/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kqa/ui/components/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,21 +70,45 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
   const [busy, setBusy] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
 
-  async function updateConversation(conversation: Conversation, action: "pin" | "rename" | "delete") {
-    if (busy || streaming) return;
-    let title: string | null = null;
-    if (action === "rename") {
-      title = window.prompt("重命名对话（最多 200 个字符）", conversation.title);
-      if (title === null) return;
-      title = title.trim();
-      if (!title || title.length > 200) { window.alert("标题须为 1–200 个字符"); return; }
+  const [conversationToRename, setConversationToRename] = useState<Conversation | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameError, setRenameError] = useState("");
+  const renameInputId = useId();
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  async function confirmRename() {
+    if (!conversationToRename || busy || streaming) return;
+    const title = renameTitle.trim();
+    if (!title || title.length > 200) {
+      setRenameError(title ? "最多 200 个字符。" : "请输入对话名称。");
+      return;
     }
+    setBusy(true);
+    setRenameError("");
+    try {
+      const response = await fetch(`/api/conversations/${conversationToRename.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || "重命名失败");
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      setConversationToRename(null);
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : "重命名失败，请重试");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateConversation(conversation: Conversation, action: "pin" | "delete") {
+    if (busy || streaming) return;
     setBusy(true);
     try {
       const response = await fetch(`/api/conversations/${conversation.id}`, {
         method: action === "delete" ? "DELETE" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        ...(action !== "delete" ? { body: JSON.stringify(action === "pin" ? { pinned: !conversation.pinned } : { title }) } : {}),
+        ...(action !== "delete" ? { body: JSON.stringify({ pinned: !conversation.pinned }) } : {}),
       });
       if (!response.ok) throw new Error((await response.json()).error || "操作失败");
       if (action === "delete") {
@@ -162,7 +188,11 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
                 <DropdownMenuItem onSelect={() => void updateConversation(conversation, "pin")}>
                   {conversation.pinned ? <PinOff /> : <Pin />}{conversation.pinned ? "取消固定" : "固定"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void updateConversation(conversation, "rename")}><Pencil />重命名</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => {
+                  setRenameTitle(conversation.title);
+                  setRenameError("");
+                  setConversationToRename(conversation);
+                }}><Pencil />重命名</DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConversationToDelete(conversation)}><Trash2 />删除</DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
@@ -171,6 +201,53 @@ function ConversationList({ onSelect, variant = "inline" }: ConversationListProp
       ))}
       {isFetchingNextPage && <ConversationListSkeleton />}
     </div>
+    <Dialog
+      open={Boolean(conversationToRename)}
+      onOpenChange={(open) => {
+        if (!open && !busy) setConversationToRename(null);
+      }}
+    >
+      <DialogContent
+        className="text-foreground sm:max-w-md"
+        showCloseButton={!busy}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          renameInputRef.current?.focus();
+          renameInputRef.current?.select();
+        }}
+      >
+        <form className="flex flex-col gap-5" onSubmit={(event) => {
+          event.preventDefault();
+          void confirmRename();
+        }}>
+          <DialogHeader>
+            <DialogTitle>重命名对话</DialogTitle>
+            <DialogDescription>为对话设置一个便于查找的名称</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Input
+              ref={renameInputRef}
+              id={renameInputId}
+              value={renameTitle}
+              aria-label="对话名称"
+              disabled={busy}
+              aria-invalid={Boolean(renameError)}
+              aria-describedby={renameError ? `${renameInputId}-error` : undefined}
+              onChange={(event) => {
+                const value = event.target.value;
+                setRenameTitle(value);
+                setRenameError(value.trim().length > 200 ? "最多 200 个字符。" : "");
+              }}
+            />
+            {renameError && <p id={`${renameInputId}-error`} role="alert" className="text-sm text-destructive">{renameError}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setConversationToRename(null)}>取消</Button>
+            <Button type="submit" className="text-white" disabled={busy || streaming || !renameTitle.trim()}>{busy ? "重命名中…" : "重命名"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
     <AlertDialog
       open={Boolean(conversationToDelete)}
       onOpenChange={(open) => {

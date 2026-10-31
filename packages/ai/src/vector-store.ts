@@ -36,14 +36,23 @@ export async function getVectorStore(embeddings: OpenAIEmbeddings) {
  * 用 Milvus 原生 client 做 delete（LangChain 封装不支持删除）。
  */
 export async function deleteDocumentVectors(documentId: string): Promise<void> {
-  const { MilvusClient } = await import("@zilliz/milvus2-sdk-node");
+  const { MilvusClient, ErrorCode } = await import("@zilliz/milvus2-sdk-node");
   const client = new MilvusClient({ address: getMilvusAddress() });
 
   try {
-    await client.delete({
+    const collection = await client.hasCollection({ collection_name: MILVUS_COLLECTION });
+    if (collection.status.error_code !== ErrorCode.SUCCESS) {
+      throw new Error(`检查向量集合失败：${collection.status.reason}`);
+    }
+    // 首次入库前失败时集合可能尚未创建，此时没有向量需要清理。
+    if (!collection.value) return;
+    const result = await client.delete({
       collection_name: MILVUS_COLLECTION,
-      filter: `documentId == "${documentId}"`,
+      filter: `documentId == ${JSON.stringify(documentId)}`,
     });
+    if (result.status.error_code !== ErrorCode.SUCCESS) {
+      throw new Error(`删除向量失败：${result.status.reason}`);
+    }
   } finally {
     await client.closeConnection();
   }

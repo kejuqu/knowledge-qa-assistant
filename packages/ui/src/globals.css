@@ -29,7 +29,8 @@
   --accent: oklch(0.97 0.018 158);
   --accent-foreground: oklch(0.25 0.06 158);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.84 0.035 158 / 0.72);
+  --theme-border: oklch(0.84 0.035 158 / 0.72);
+  --border: var(--theme-border);
   --input: oklch(0.84 0.035 158 / 0.72);
   --ring: oklch(0.56 0.12 158 / 0.7);
   --sidebar: oklch(91.513% 0.00323 15.446);
@@ -60,7 +61,8 @@
   --accent: oklch(0.34 0.06 158 / 0.82);
   --accent-foreground: oklch(0.97 0.02 158);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.75 0.06 158 / 0.2);
+  --theme-border: oklch(0.75 0.06 158 / 0.2);
+  --border: var(--theme-border);
   --input: oklch(0.75 0.06 158 / 0.24);
   --ring: oklch(0.68 0.14 158 / 0.7);
   --sidebar: oklch(0.17 0 0);
@@ -91,7 +93,8 @@
     --accent: oklch(0.34 0.06 158 / 0.82);
     --accent-foreground: oklch(0.97 0.02 158);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(0.75 0.06 158 / 0.2);
+    --theme-border: oklch(0.75 0.06 158 / 0.2);
+    --border: var(--theme-border);
     --input: oklch(0.75 0.06 158 / 0.24);
     --ring: oklch(0.68 0.14 158 / 0.7);
     --sidebar: oklch(0.17 0 0);
@@ -120,6 +123,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-theme-border: var(--theme-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -143,6 +147,12 @@ body {
 
 /* 统一操作控件的默认光标，拖拽等显式 cursor 工具类仍可覆盖。 */
 @layer base {
+  /* Tailwind v4 的默认边框为 currentColor，统一使用主题色，工具类仍可覆盖。 */
+  *, ::before, ::after, ::backdrop {
+    border-color: var(--theme-border);
+  }
+
+
   :where(
     button,
     a[href],
